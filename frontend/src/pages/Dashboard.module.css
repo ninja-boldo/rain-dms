@@ -1,0 +1,520 @@
+.page {
+  padding: 32px 36px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 40px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 2.2rem;
+  font-weight: 300;
+  color: var(--text-primary);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.subtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-top: 6px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.errorBadge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(196, 90, 74, 0.08);
+  border: 1px solid var(--red);
+  border-radius: 6px;
+  color: var(--red);
+  font-size: 0.82rem;
+  font-family: var(--font-mono);
+}
+
+.pulse {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent);
+  border: 1px solid var(--border-accent);
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: var(--accent-glow);
+}
+
+.pulseDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulseAnim 2s infinite cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes pulseAnim {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.5;
+  }
+}
+
+/* Stats Grid */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 40px;
+}
+
+.statCard {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+}
+
+.statCard:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.statCardAccent {
+  background: var(--accent-glow);
+  border-color: var(--border-accent);
+}
+
+.statLabel {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.statCardAccent .statLabel {
+  color: var(--accent);
+}
+
+.statValue {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.statSub {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Sections */
+.section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.sectionTitle {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+.sectionHeader .sectionTitle {
+  margin-bottom: 0;
+}
+
+/* Sparkline */
+.sparkline {
+  overflow: visible;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+/* Workers */
+.workersRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.workerBlock {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.workerBlockHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+
+.workerName {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.workerActive {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.workerDots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workerDot {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  transition: all 0.3s ease;
+}
+
+.workerDotActive {
+  background: currentColor; /* inherits from parent or inline style */
+  border-color: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+
+/* Queues */
+.queuesRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.queueWrap {
+  flex: 1;
+  min-width: 280px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.queueHeader {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+
+.queueLabel {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.queueCount {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.queueTrack {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 36px;
+  background: var(--bg-surface);
+  border-radius: 18px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+}
+
+.queueArrow {
+  opacity: 0.5;
+}
+
+.queueItems {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.queueItem {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  animation: slideRight 1s linear infinite;
+}
+
+.queueOverflow {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  margin-left: 4px;
+  font-weight: 600;
+}
+
+.queueWorker {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  animation: spin 1s linear infinite;
+}
+
+.queueEmpty {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 12px;
+}
+
+.queueConnector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@keyframes slideRight {
+  0% {
+    transform: translateX(-4px);
+  }
+  100% {
+    transform: translateX(4px);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* API Note */
+.apiNote {
+  margin-top: 40px;
+  background: var(--bg-surface);
+  border: 1px dashed var(--text-muted);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.apiNoteSummary {
+  padding: 12px 16px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  user-select: none;
+  background: var(--bg-elevated);
+}
+
+.apiNoteSummary:hover {
+  color: var(--text-primary);
+}
+
+.apiNoteBody {
+  padding: 16px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  border-top: 1px dashed var(--text-muted);
+}
+
+.apiCode {
+  font-family: var(--font-mono);
+  background: var(--bg-elevated);
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  margin: 12px 0;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+  .page {
+    padding: 20px 16px;
+  }
+
+  .queuesRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .queueConnector {
+    transform: rotate(90deg);
+    padding: 10px 0;
+  }
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.statCardWarn .statValue {
+  color: var(--text-muted);
+}
+.statValueNa {
+  color: var(--text-muted) !important;
+  font-size: 1.4rem !important;
+}
+
+/* Sparkline */
+.sparklineWrap {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  height: 80px;
+  color: var(--text-muted);
+}
+
+.sparkline {
+  flex: 1;
+  overflow: visible;
+}
+
+.sparklineAxisY {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  padding: 2px 0;
+  min-width: 28px;
+  text-align: right;
+}
+
+.sparkLegend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sparkLegendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.sparkLegendLabel {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* Backend docs */
+.backendDocsToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s;
+}
+.backendDocsToggle:hover { color: var(--accent); }
+
+.backendDocsBody {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.backendDocsIntro {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.backendDocsIntro code {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  background: var(--bg-overlay);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--accent);
+}
+
+.backendIssues {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.backendIssue {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.issueLabel {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  min-width: 200px;
+}
+
+.issueDesc {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.issueDesc code {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  background: var(--bg-elevated);
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: var(--accent);
+}

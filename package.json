@@ -1,0 +1,33 @@
+{
+  "name": "rain-dms",
+  "scripts": {
+    "dev::backend": "cd backend && bun run dev",
+    "dev::backend::db": "cd backend && bunx drizzle-kit push",
+    "dev::frontend": "bun --cwd frontend run dev"
+  },
+  "dependencies": {
+    "amqplib": "^2.0.1",
+    "canvas": "^3.2.3",
+    "chokidar": "^5.0.0",
+    "concurrently": "^9.2.1",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "fdir": "^6.5.0",
+    "hono": "^4.12.18",
+    "meilisearch": "^0.58.0",
+    "move-file": "^4.1.0",
+    "onnxruntime-node": "^1.26.0",
+    "onnxruntime-web": "^1.26.0",
+    "pdf-parse": "^2.4.5",
+    "pg": "^8.20.0",
+    "ppu-paddle-ocr": "^5.4.1",
+    "tesseract.js": "^7.0.0",
+    "uuid": "^14.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/pg": "^8.20.0",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.21.0"
+  }
+}
