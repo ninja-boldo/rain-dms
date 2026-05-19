@@ -1,6 +1,7 @@
-import { PDFParse, Screenshot } from "pdf-parse";
+import { Screenshot } from "pdf-parse";
+import { pdfToImg } from "pdftoimg-js";
 import { ImageLike } from "tesseract.js";
-const { createCanvas, loadImage } = require("canvas");
+
 import fs from "fs/promises";
 import { v4 as uuidv4 } from "uuid";
 import {
@@ -13,32 +14,67 @@ import {
 } from "../../utils/types/main";
 import { Box, PaddleOcrResult, RecognitionResult } from "ppu-paddle-ocr";
 import "dotenv/config";
-import { error } from "console";
 import path from "path";
+import { writeFile } from "fs/promises";
 
-export const pdfToPngPages = async (filePath: string) => {
-  const parser = new PDFParse({ url: filePath });
+export const pdfToImgPages = async (
+  filePath: string,
+  baseTempDir: string,
+): Promise<string[]> => {
+  if (!filePath) {
+    throw new Error("ArgumentError: File path is required.");
+  }
 
-  const result = await parser.getScreenshot({
-    scale: 2,
-  });
+  try {
+    const images: string[] = await pdfToImg(filePath, {
+      pages: "all",
+      imgType: "jpg",
+      scale: 2,
+      background: "white",
+    });
 
-  await parser.destroy();
+    // FAST PARALLEL WRITE (bounded)
+    const results = new Array(images.length);
 
-  return result.pages;
+    await Promise.all(
+      images.map(async (img, i) => {
+        const base64 = img.replace(/^data:image\/\w+;base64,/, "");
+        const buffer = Buffer.from(base64, "base64");
+
+        const filePath = path.join(
+          baseTempDir,
+          `${Date.now()}_${i}_${crypto.randomUUID()}.jpg`,
+        );
+
+        await writeFile(filePath, buffer);
+        results[i] = filePath;
+      }),
+    );
+
+    return results;
+  } catch (error) {
+    throw new Error(
+      `failed for this filepath: ${filePath} with this error: ${error}`,
+    );
+  }
 };
 
-export const screenshotToPaddleComp = async (s: Screenshot) => {
-  const buffer = Buffer.from(s.data);
+export const formatFilename = async (filepath: string): Promise<string> => {
+  const ext = getExtension(filepath);
+  const name = getFilename(filepath);
 
-  const img = await loadImage(buffer);
+  const suffix = `-${uuidv4()}-${new Date().toISOString().replace(/:/g, "-")}`;
+  const suffixBytes = Buffer.byteLength(suffix + "." + ext, "utf8");
 
-  const canvas = createCanvas(img.width, img.height);
-  const ctx = canvas.getContext("2d");
+  // Leave room for suffix + extension, hard cap at 200 bytes total name
+  const allowedNameBytes = 200 - suffixBytes;
 
-  ctx.drawImage(img, 0, 0);
+  let truncated = name;
+  while (Buffer.byteLength(truncated, "utf8") > allowedNameBytes) {
+    truncated = [...truncated].slice(0, -1).join("");
+  }
 
-  return canvas;
+  return `${truncated}${suffix}.${ext}`;
 };
 
 const convertPaddleBox = (paddleBox: Box): BoundingBoxOcr => {
@@ -52,13 +88,48 @@ const convertPaddleBox = (paddleBox: Box): BoundingBoxOcr => {
   return parsedBox;
 };
 const parseRawLine = (line: RecognitionResult[]): LineOcr => {
-  const boxes: BoxOcr[] = line.map((singleCell) => ({
-    text: singleCell.text,
-    confidence: singleCell.confidence,
-    boundingBox: convertPaddleBox(singleCell.box),
-  }));
-  const lineParsed: LineOcr = { boxes: boxes };
-  return lineParsed;
+  const boxes: BoxOcr[] = line.map((singleCell) => {
+    // 1. Maintain the fully original "line" box for strict backwards compatibility
+    const originalBox: BoxOcr = {
+      text: singleCell.text,
+      confidence: singleCell.confidence,
+      boundingBox: convertPaddleBox(singleCell.box),
+      words: [],
+    };
+
+    // 2. Compute the sub-word bounding boxes
+    const words = singleCell.text.split(" ");
+    const totalChars = singleCell.text.length;
+
+    if (totalChars > 0) {
+      const boxWidth = singleCell.box.width;
+      const pxPerChar = boxWidth / totalChars;
+      let currentX = singleCell.box.x;
+
+      words.forEach((word) => {
+        if (!word) return;
+        const wordWidth = word.length * pxPerChar;
+
+        originalBox.words!.push({
+          text: word,
+          confidence: singleCell.confidence,
+          boundingBox: {
+            upLeftPoint: { x: currentX, y: singleCell.box.y },
+            downRightPoint: {
+              x: currentX + wordWidth,
+              y: singleCell.box.y + singleCell.box.height,
+            },
+          },
+        });
+
+        currentX += wordWidth + pxPerChar;
+      });
+    }
+
+    return originalBox;
+  });
+
+  return { boxes };
 };
 const parseRawLines = (linesRaw: RecognitionResult[][]): LineOcr[] => {
   const newLines: LineOcr[] = linesRaw.map((lineRaw) => parseRawLine(lineRaw));
@@ -81,18 +152,41 @@ export const parseRawPagesPaddleOcr = async (
   return { pages: pages, originalFilePath: filepath };
 };
 
-const getLastElement = <T>(arr: T[]): T => {
-  const arrLength: number = arr.length;
-  return arr[arrLength - 1];
-};
-
 export const getFilename = (fullFilepath: string): string => {
   return path.parse(fullFilepath).name;
 };
 
 export const getExtension = (fullFilepath: string): string => {
+  // for /../../test.ts this would return ts
   return path.parse(fullFilepath).ext.slice(1);
 };
+
+export function sanitizeFilePath(
+  inputPath: string,
+  maxNameBytes: number = 200,
+): string {
+  const dir = path.dirname(inputPath);
+  const ext = path.extname(inputPath);
+  const name = path.basename(inputPath, ext);
+
+  const sanitizedName = name
+    .replace(/\s+/g, "_")
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  // Truncate to maxNameBytes, accounting for the extension
+  const extBytes = Buffer.byteLength(ext, "utf8");
+  const allowedNameBytes = maxNameBytes - extBytes;
+
+  let truncated = sanitizedName || "unnamed";
+  while (Buffer.byteLength(truncated, "utf8") > allowedNameBytes) {
+    // Slice by char to avoid cutting mid-surrogate-pair
+    truncated = [...truncated].slice(0, -1).join("");
+  }
+
+  return path.join(dir, truncated + ext);
+}
 
 export const convertImgPathToUrl = (path: string): string => {
   const filename = getFilename(path);
@@ -137,25 +231,55 @@ export const isFilepath = (s: string): boolean => {
   return !s.startsWith("http");
 };
 
-export async function downloadFile(serverPath: string, outputPath: string) {
-  const res = await fetch(
-    `http://localhost:3000/download/consume?filepath=${encodeURIComponent(serverPath)}`,
+export const sanitizeUrl = (url: string): string => {
+  // Remove all occurrences of "http://", "https://", "http//", "https//" at the start of the string
+  const cleaned = url.replace(/^(?:https?:\/\/?)+/gi, "");
+
+  // If "https" was present anywhere in the original prefix, prefer it
+  const isHttps = url.toLowerCase().includes("https");
+  const proto = isHttps ? "https://" : "http://";
+
+  return `${proto}${cleaned}`;
+};
+
+export async function deleteFileApi(serverPath: string) {
+  const url = sanitizeUrl(
+    `${process.env.BASE_SITE_URL}:3000/delete/consume?filepath=${encodeURIComponent(serverPath)}`,
   );
+  const res = await fetch(url, { method: "delete" });
+}
+
+export async function downloadFile(
+  serverPath: string,
+  outputPath: string,
+  deleteAfterDown: boolean = false,
+) {
+  const url = sanitizeUrl(
+    `${process.env.BASE_SITE_URL}:3000/download/consume?filepath=${encodeURIComponent(serverPath)}`,
+  );
+  console.log(`Downloading from url: ${url}`);
+  const res = await fetch(url);
 
   if (!res.ok) {
-    throw new Error(`Download failed: ${res.status}`);
+    throw new Error(`Download failed: ${res.status} for URL ${url}`);
   }
 
   const buffer = Buffer.from(await res.arrayBuffer());
 
+  await fs.mkdir(path.dirname(outputPath), {
+    recursive: true,
+  });
   await fs.writeFile(outputPath, buffer);
+  if (deleteAfterDown) {
+    await deleteFileApi(serverPath);
+  }
+  return outputPath;
 }
 
 export const toArrayBuffer = (buffer: Buffer): ArrayBuffer => {
-  return buffer.buffer.slice(
-    buffer.byteOffset,
-    buffer.byteOffset + buffer.byteLength,
-  ) as ArrayBuffer;
+  const ab = new ArrayBuffer(buffer.byteLength);
+  new Uint8Array(ab).set(buffer);
+  return ab;
 };
 
 export async function uploadFiles(paths: string[] = []) {
@@ -169,7 +293,8 @@ export async function uploadFiles(paths: string[] = []) {
     form.append("file", file);
   }
 
-  const res = await fetch("http://localhost:3000/upload/temp", {
+  const url = sanitizeUrl(`${process.env.BASE_SITE_URL}:3000/upload/temp`);
+  const res = await fetch(url, {
     method: "POST",
     body: form,
   });
@@ -181,15 +306,14 @@ export async function uploadFiles(paths: string[] = []) {
   return await res.json();
 }
 
-export const imgFilepathToCanvas = async (filepath: string) => {
-  const img = await loadImage(filepath);
-
-  const canvas = createCanvas(img.width, img.height);
-  const ctx = canvas.getContext("2d");
-
-  ctx.drawImage(img, 0, 0);
-
-  return canvas;
+export const imgFilepathToArrayBuffer = async (
+  filepath: string,
+): Promise<ArrayBuffer> => {
+  const buffer = await fs.readFile(filepath);
+  return buffer.buffer.slice(
+    buffer.byteOffset,
+    buffer.byteOffset + buffer.byteLength,
+  );
 };
 
 export const screenshotToImageLike = (s: Screenshot): ImageLike => {

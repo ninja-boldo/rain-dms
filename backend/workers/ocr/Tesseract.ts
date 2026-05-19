@@ -1,7 +1,7 @@
 import { Screenshot } from "pdf-parse";
 import Tesseract from "tesseract.js";
 import { createScheduler, createWorker } from "tesseract.js";
-import { pdfToPngPages, screenshotToImageLike } from "./utils";
+import { pdfToImgPages, screenshotToImageLike } from "./utils";
 
 export class TesseractOcr {
   private workerCount: number | null = null;

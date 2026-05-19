@@ -1,0 +1,32 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: keda-trigger-auth-rabbitmq
+  namespace: default
+spec:
+  secretTargetRef:
+    - parameter: host
+      name: app-env
+      key: AMQP_URL
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: worker-app-scaledobject
+  namespace: default
+spec:
+  scaleTargetRef:
+    name: worker-app
+  pollingInterval: 10
+  cooldownPeriod: 60
+  minReplicaCount: 0
+  maxReplicaCount: 5
+  triggers:
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        queueName: ocr_handling_input
+        mode: QueueLength
+        value: "10"
+      authenticationRef:
+        name: keda-trigger-auth-rabbitmq

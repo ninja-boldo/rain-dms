@@ -1,3 +1,5 @@
+import "./workers/ocr/pdfjs-polyfill";
+
 import path from "path";
 import { FileMerger } from "./workers/FileMerger";
 import { FileProcessor } from "./workers/FileProcessor";
@@ -32,7 +34,7 @@ await Promise.all([
     ),
   ),
 
-  new FileProcessor().init("en", tempFolder),
+  //new FileProcessor().init("en", tempFolder),
 
   new FileMerger(consumedFolder).init(),
 ]);

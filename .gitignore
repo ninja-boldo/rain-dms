@@ -6,3 +6,13 @@ testingFiles
 temp/
 consume_files/
 consumed_files/
+*.ini
+*.log
+*.traineddata
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.zip
+/backend/banner_imgs
+/docker/meili_data

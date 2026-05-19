@@ -1,0 +1,15 @@
+node_modules
+.git
+temp/
+backend/temp_consume/
+consumed_files/
+consume_files/
+docker/meili_data/
+*.log
+*.traineddata
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.zip
+/backend/banner_imgs

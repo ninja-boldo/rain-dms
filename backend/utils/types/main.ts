@@ -14,6 +14,41 @@ export enum FileTypes {
   pdf = ".pdf",
 }
 
+export interface QueueStats {
+  queue: string;
+
+  // RabbitMQ broker stats
+  messages: number;
+  readyMessages: number;
+  unackedMessages: number;
+
+  consumers: number;
+  busyConsumers: number;
+  idleConsumers: number;
+
+  // Local worker stats
+  published: number;
+  consumed: number;
+  acked: number;
+  nacked: number;
+
+  inFlightMessages: number;
+
+  // Rates
+  publishRatePerSec: number;
+  consumeRatePerSec: number;
+  ackRatePerSec: number;
+  nackRatePerSec: number;
+
+  // Timing
+  clientUptimeMs: number;
+  createdAt: number;
+  lastMessageAt: number | null;
+
+  // Health
+  processingBacklog: boolean;
+}
+
 export enum QueueNames {
   startOcrQueue = "ocr_handling_input",
   consumeOcrOutput = "ocr_handling_output",
@@ -33,6 +68,7 @@ export interface BoxOcr {
   text: string;
   confidence: number | null;
   boundingBox: BoundingBoxOcr;
+  words?: BoxOcr[];
 }
 
 export interface LineOcr {

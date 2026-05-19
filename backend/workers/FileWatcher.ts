@@ -5,6 +5,7 @@ import "dotenv/config";
 import { QueueNames, ImportantDirs } from "../utils/types/main";
 import fs from "fs";
 import path from "path";
+import { sanitizeFilePath } from "./ocr/utils";
 
 export const FileWatcher = async (rootPath: string) => {
   const root = path.resolve(rootPath);
@@ -43,7 +44,19 @@ export const FileWatcher = async (rootPath: string) => {
         !allowedExt.some((ext) => f.endsWith(ext)),
     })
     .on("add", async (path) => {
-      console.log(path);
-      await queueHandlerObj.sendMsg(path, QueueNames.startOcrQueue);
+      const newPath: string = sanitizeFilePath(path);
+      let finalPath = newPath;
+      try {
+        if (path !== newPath) {
+          await fs.promises.rename(path, newPath);
+          console.log("Rename complete!", newPath);
+        }
+      } catch (err) {
+        console.error("Rename failed:", err);
+        finalPath = path; // Fallback to original path if rename fails
+      }
+      
+      console.log("Sending to queue:", finalPath);
+      await queueHandlerObj.sendMsg(finalPath, QueueNames.startOcrQueue);
     });
 };

@@ -1,24 +1,39 @@
+import "./pdfjs-polyfill";
 import { PaddleOcrResult, PaddleOcrService } from "ppu-paddle-ocr";
-import {
-  parseRawPagesPaddleOcr,
-  pdfToPngPages,
-  saveImgToTemp,
-  toArrayBuffer,
-  uploadFiles,
-} from "./utils";
-import { Screenshot } from "pdf-parse";
-import fs from "fs/promises";
-import {
-  FileTypes,
-  OcrResult,
-  PaddleRecognitionModel,
-} from "../../utils/types/main";
+import { parseRawPagesPaddleOcr, pdfToImgPages, uploadFiles } from "./utils";
+import { OcrResult, PaddleRecognitionModel } from "../../utils/types/main";
 require("dotenv").config();
+import { readFile } from "fs/promises";
+
+// Runs at most `limit` async tasks concurrently.
+// Preserves input order in the returned array.
+async function pMap<T, R>(
+  items: T[],
+  fn: (item: T, index: number) => Promise<R>,
+  limit: number,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, worker);
+  await Promise.all(workers);
+  return results;
+}
 
 export class PaddleJsOcr {
   private lang: string;
   private model: PaddleOcrService | null = null;
   private tempFolder: string | null = null;
+  // How many pages to OCR concurrently. PaddleOCR is CPU/GPU-bound;
+  // going above 4 typically hurts throughput and risks OOM on large docs.
+  private readonly ocrConcurrency: number;
   private modelBaseUrl: string =
     "https://media.githubusercontent.com/media/PT-Perkasa-Pilar-Utama/ppu-paddle-ocr-models/main";
   private modelNameToUrl: { [modelName: string]: string } = {
@@ -26,9 +41,14 @@ export class PaddleJsOcr {
     "PP-OCRv5-mobile-de": `${this.modelBaseUrl}/recognition/multi/latin/v5/latin_PP-OCRv5_mobile_rec_infer.onnx`,
   };
 
-  constructor(lang: string = "eng", tempFolder: string) {
+  constructor(
+    lang: string = "eng",
+    tempFolder: string,
+    ocrConcurrency: number = 3,
+  ) {
     this.lang = lang;
     this.tempFolder = tempFolder;
+    this.ocrConcurrency = ocrConcurrency;
   }
 
   async init(
@@ -39,78 +59,57 @@ export class PaddleJsOcr {
     });
     await service.initialize();
     this.model = service;
-    //this.model.changeRecognitionModel(this.modelNameToUrl[model.valueOf()]);
-
     return this;
   }
 
   async getOcr(
     filePath: string,
+    origServerPath: string | null = null,
     isRemote: boolean = false,
   ): Promise<OcrResult> {
     if (!this.model) {
       throw new Error("OCR model not initialized. Call init() first.");
     }
-    console.log("now running inference");
 
     const isPdf = filePath.toLowerCase().endsWith(".pdf");
-
-    const imageFiles: Screenshot[] | string[] = isPdf
-      ? await pdfToPngPages(filePath)
+    const imageFiles: string[] = isPdf
+      ? await pdfToImgPages(filePath, this.tempFolder!)
       : [filePath];
 
-    const results = await Promise.all(
-      imageFiles.map(async (img) => {
+    const ocrResults = await pMap(
+      imageFiles,
+      async (imgPath, i) => {
+        console.log(`OCR page ${i + 1}/${imageFiles.length}: ${imgPath}`);
         try {
-          let input: ArrayBuffer;
-          let bannerImgPath: string | null = null;
-
-          if (typeof img === "string") {
-            bannerImgPath = img;
-            const file = await fs.readFile(img);
-            input = toArrayBuffer(file);
-          } else {
-            bannerImgPath = await saveImgToTemp(
-              img.data,
-              this.tempFolder,
-              null,
-              FileTypes.png,
-            );
-            const buffer = Buffer.from(img.data);
-            input = toArrayBuffer(buffer);
-          }
-          const result = await this.model!.recognize(input);
-
-          if (bannerImgPath === null) {
-            throw Error(
-              `the ingestion pipeline failed as it wasnt able to add a banner img to the corresponding page/document for filepath ${filePath}`,
-            );
-          }
-          return { bannerImgPath, result };
+          const imageBuffer = await readFile(imgPath);
+          
+          const result = await this.model!.recognize(imageBuffer.buffer);
+          return { bannerImgPath: imgPath, result } as {
+            bannerImgPath: string;
+            result: PaddleOcrResult;
+          };
         } catch (error) {
-          console.error(
-            `failed with this error: ${error} for img of type: ${typeof img}`,
-          );
+          console.error(`OCR failed on page ${i + 1} (${imgPath}): ${error}`);
           throw error;
         }
-      }),
+      },
+      this.ocrConcurrency,
     );
 
-    const pagesRaw: { [imgFilePath: string]: PaddleOcrResult } = {};
-    for (const res of results) {
-      if (res) {
-        pagesRaw[res.bannerImgPath] = res.result;
-      }
-    }
+    // Build pagesRaw preserving page order (pMap already guarantees order).
+    const pagesRaw: { [imgFilePath: string]: PaddleOcrResult } =
+      Object.fromEntries(
+        ocrResults.map(({ bannerImgPath, result }) => [bannerImgPath, result]),
+      );
 
     const pagesParsed: OcrResult = await parseRawPagesPaddleOcr(
       pagesRaw,
-      filePath,
+      origServerPath ?? filePath,
     );
+
     if (isRemote) {
-      const bannerImgs: string[] = pagesParsed.pages.map(
-        (page) => page.bannerImgpath,
-      );
+      const bannerImgs = pagesParsed.pages.map((page) => page.bannerImgpath);
+      console.log("uploading banner imgs to remote server");
       await uploadFiles(bannerImgs);
     }
 

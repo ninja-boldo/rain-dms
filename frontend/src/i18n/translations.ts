@@ -5,6 +5,7 @@ export const translations = {
       search: "Suche",
       upload: "Hochladen",
       settings: "Einstellungen",
+      dashboard: "Dashboard",
     },
     home: {
       title: "Dokumentenarchiv",
@@ -71,6 +72,7 @@ export const translations = {
       search: "Search",
       upload: "Upload",
       settings: "Settings",
+      dashboard: "Dashboard",
     },
     home: {
       title: "Document Archive",

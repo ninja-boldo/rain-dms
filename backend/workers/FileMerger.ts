@@ -49,7 +49,18 @@ export class FileMerger {
     const nowTimestamp = currentDate.toISOString().replace(/:/g, "-");
     const newFilename: string = `${getFilename(file.originalFilePath)}-${uuidv4()}-${nowTimestamp.toString()}.${getExtension(file.originalFilePath)}`;
     const newPath: string = `${this.newOrigPath}/${newFilename}`;
-    await moveFile(file.originalFilePath, newPath);
+
+    try {
+      await moveFile(file.originalFilePath, newPath);
+    } catch (e: any) {
+      if (e.code === "ENOENT") {
+        console.warn(
+          `Warning: Could not move file because it no longer exists at ${file.originalFilePath}. It may have been deleted or moved already.`,
+        );
+      } else {
+        throw e;
+      }
+    }
 
     const fileIdJson = await this.db
       .insert(documentsTable)

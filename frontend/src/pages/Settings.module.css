@@ -168,32 +168,3 @@
     align-items: flex-start;
   }
 }
-
-.rangeWrap {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.range {
-  flex: 1;
-  accent-color: var(--accent);
-  height: 4px;
-  cursor: pointer;
-}
-
-.rangeValue {
-  font-family: var(--font-mono);
-  font-size: 0.82rem;
-  color: var(--accent);
-  min-width: 36px;
-  text-align: right;
-}
-
-.rowHint {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  margin-top: 3px;
-  line-height: 1.4;
-}

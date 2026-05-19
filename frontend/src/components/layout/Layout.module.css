@@ -117,10 +117,31 @@
   border-top: 1px solid var(--border);
 }
 
+.footerContent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .version {
   font-family: var(--font-mono);
   font-size: 0.7rem;
   color: var(--text-muted);
+}
+
+.ossLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.ossLink:hover {
+  color: var(--accent);
 }
 
 .main {

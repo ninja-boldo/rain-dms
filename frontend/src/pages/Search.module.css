@@ -468,84 +468,54 @@
   }
 }
 
-/* ── Tags ─────────────────── */
+/* ─── Token type colors ─────────────────────────── */
+.token_text {
+  background: var(--bg-overlay);
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+.token_tag {
+  background: var(--accent-glow);
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+.token_boolean {
+  background: rgba(88, 166, 255, 0.1);
+  border-color: rgba(88, 166, 255, 0.3);
+  color: #58a6ff;
+  font-weight: 600;
+}
+.tokenPrefix {
+  opacity: 0.6;
+  font-size: 0.65rem;
+  margin-right: 2px;
+}
+.queryPreview {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-left: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+.queryPreview code {
+  color: var(--accent);
+}
+
+/* ─── Group tags ─────────────────────────────────── */
 .groupTags {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 4px;
 }
-
 .groupTag {
   font-family: var(--font-mono);
-  font-size: 0.68rem;
-  padding: 2px 7px;
-  background: var(--accent-glow);
-  border: 1px solid var(--border-accent);
-  color: var(--accent);
-  border-radius: 10px;
-}
-
-.pageMatchRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 4px;
-}
-
-.pageMatchChip {
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   padding: 1px 6px;
-  background: rgba(88, 166, 255, 0.1);
-  border: 1px solid rgba(88, 166, 255, 0.35);
-  color: #58a6ff;
-  border-radius: 8px;
-}
-
-/* ── Query preview ─── */
-.queryPreview {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  background: var(--bg-overlay);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-.queryPreviewLabel {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.queryPreviewCode {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  color: var(--accent);
   background: var(--accent-glow);
-  padding: 1px 6px;
-  border-radius: 4px;
-}
-.queryPreviewDiff {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--text-muted);
-}
-
-.limitWarning {
+  border: 1px solid var(--accent-dim);
   color: var(--accent);
-  font-size: 0.75rem;
-}
-
-.emptyHint2 {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  margin-top: 8px;
-  font-family: var(--font-mono);
-  max-width: 500px;
-  line-height: 1.5;
+  border-radius: 3px;
 }

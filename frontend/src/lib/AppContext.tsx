@@ -8,11 +8,9 @@ import React, {
 import { Theme, Language } from "../types";
 import { translations } from "../i18n/translations";
 
-export interface Settings {
+interface Settings {
   serverUrl: string;
   uploadDir: string;
-  searchLimit: number;
-  showRawQuery: boolean;
 }
 
 interface AppContextValue {
@@ -29,10 +27,9 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 const DEFAULT_SETTINGS: Settings = {
   serverUrl: "http://localhost:3000",
+  // ← CHANGE THIS to your actual upload directory
   uploadDir:
     "/Users/bennetjollenbeck/Desktop/programming/web/react/family_projects/rain-dms/consumed_files",
-  searchLimit: 100,
-  showRawQuery: false,
 };
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -40,10 +37,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const stored = localStorage.getItem("rain-dms-theme");
     return (stored as Theme) ?? "dark";
   });
+
   const [language, setLanguageState] = useState<Language>(() => {
     const stored = localStorage.getItem("rain-dms-lang");
     return (stored as Language) ?? "de";
   });
+
   const [settings, setSettingsState] = useState<Settings>(() => {
     const stored = localStorage.getItem("rain-dms-settings");
     return stored
@@ -55,10 +54,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setThemeState(t);
     localStorage.setItem("rain-dms-theme", t);
   };
+
   const setLanguage = (l: Language) => {
     setLanguageState(l);
     localStorage.setItem("rain-dms-lang", l);
   };
+
   const setSettings = (s: Settings) => {
     setSettingsState(s);
     localStorage.setItem("rain-dms-settings", JSON.stringify(s));
@@ -72,7 +73,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider
-      value={{ theme, setTheme, language, setLanguage, t, settings, setSettings }}
+      value={{
+        theme,
+        setTheme,
+        language,
+        setLanguage,
+        t,
+        settings,
+        setSettings,
+      }}
     >
       {children}
     </AppContext.Provider>
