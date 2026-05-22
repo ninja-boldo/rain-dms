@@ -57,6 +57,7 @@ export class FileProcessor {
       !filepath.startsWith("http://") && !filepath.startsWith("https://");
 
     let origServerPath: string | null = null;
+    let isRemote = false;
 
     if (isLocal && !fs.existsSync(filepath)) {
       // sanitizeFilePath BEFORE formatFilename so the UUID suffix
@@ -70,13 +71,13 @@ export class FileProcessor {
       origServerPath = filepath;
       await downloadFile(filepath, newPath, false);
       filepath = newPath;
-    }
-
-    const isAvail = isLocal;
-
-    if (!isAvail) {
+      isRemote = true;
+    } else if (isLocal) {
+      isRemote = false;
+    } else {
+      isRemote = true;
       fs.mkdirSync("./temp_consume", { recursive: true });
-      // Same here — sanitize before building localPath
+      // sanitize before building localPath
       const safeFilepath = sanitizeFilePath(filepath);
       const localPath = path.join(
         "./temp_consume",
@@ -87,6 +88,7 @@ export class FileProcessor {
       console.log("downloaded to:", localPath);
       filepath = localPath;
     }
+
     if (model === OcrModel.Paddle) {
       if (this.PaddleOcrObj === null) {
         throw Error(
@@ -96,7 +98,7 @@ export class FileProcessor {
       result = await this.PaddleOcrObj.getOcr(
         filepath,
         origServerPath,
-        !isAvail,
+        isRemote,
       );
     } else {
       if (this.TesseractOcrObj === null) {

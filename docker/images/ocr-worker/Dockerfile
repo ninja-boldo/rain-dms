@@ -11,7 +11,11 @@ RUN apt-get update && apt-get install -y \
     libxext6 \
     libsm6 \
     libxrender1 \
-    && rm -rf /var/lib/apt/lists/*
+    poppler-data \
+    poppler-utils \
+    && rm -rf /var/lib/apt/lists/* 
+
+
 
 # install bun
 ENV BUN_INSTALL=/usr/local/bun

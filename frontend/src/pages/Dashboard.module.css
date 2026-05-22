@@ -990,7 +990,9 @@
   padding: 2px 8px;
   cursor: pointer;
   align-self: flex-start;
-  transition: color 0.15s, border-color 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
 }
 
 .dlToggleBtn:hover {
@@ -1035,7 +1037,7 @@
 
 .dlFileTime {
   font-family: var(--font-mono);
-  font-size: 0.60rem;
+  font-size: 0.6rem;
   color: var(--text-muted);
   white-space: nowrap;
 }

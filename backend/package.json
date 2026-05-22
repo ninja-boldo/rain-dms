@@ -1,12 +1,12 @@
 {
   "name": "rain-dms-backend",
   "scripts": {
-    "dev": "concurrently \"bun run dev:api\" \"bun run dev:workers\"",
-    "dev:api": "bun run --hot ./server.ts",
-    "dev:workers": "bun run --hot ./workers.ts",
-    "db:push": "drizzle-kit push",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "dev": "concurrently \"bun run dev::api\" \"bun run dev::workers\"",
+    "dev::api": "bun run ./server.ts",
+    "dev::workers": "bun run ./workers.ts",
+    "db::push": "drizzle-kit push",
+    "db::generate": "drizzle-kit generate",
+    "db::migrate": "drizzle-kit migrate"
   },
   "dependencies": {}
 }

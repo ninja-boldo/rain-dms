@@ -1,5 +1,4 @@
 import { Screenshot } from "pdf-parse";
-import { pdfToImg } from "pdftoimg-js";
 import { ImageLike } from "tesseract.js";
 
 import fs from "fs/promises";
@@ -15,7 +14,9 @@ import {
 import { Box, PaddleOcrResult, RecognitionResult } from "ppu-paddle-ocr";
 import "dotenv/config";
 import path from "path";
-import { writeFile } from "fs/promises";
+import { Poppler } from "node-poppler";
+
+const poppler = new Poppler();
 
 export const pdfToImgPages = async (
   filePath: string,
@@ -26,32 +27,27 @@ export const pdfToImgPages = async (
   }
 
   try {
-    const images: string[] = await pdfToImg(filePath, {
-      pages: "all",
-      imgType: "jpg",
-      scale: 2,
-      background: "white",
-    });
+    const outputDir = `${baseTempDir}/${uuidv4()}`;
 
-    // FAST PARALLEL WRITE (bounded)
-    const results = new Array(images.length);
+    await fs.mkdir(outputDir, { recursive: true });
 
-    await Promise.all(
-      images.map(async (img, i) => {
-        const base64 = img.replace(/^data:image\/\w+;base64,/, "");
-        const buffer = Buffer.from(base64, "base64");
-
-        const filePath = path.join(
-          baseTempDir,
-          `${Date.now()}_${i}_${crypto.randomUUID()}.jpg`,
-        );
-
-        await writeFile(filePath, buffer);
-        results[i] = filePath;
-      }),
+    const res: string = await poppler.pdfToCairo(
+      filePath,
+      `${outputDir}/page`,
+      {
+        jpegFile: true,
+      },
     );
 
-    return results;
+    const files = await fs.readdir(outputDir);
+
+    const imagePaths = files
+      .filter((f) => f.endsWith(".jpg"))
+      .map((f) => `${outputDir}/${f}`)
+      .sort();
+    console.log("imagePaths: ", imagePaths);
+
+    return imagePaths;
   } catch (error) {
     throw new Error(
       `failed for this filepath: ${filePath} with this error: ${error}`,
@@ -188,9 +184,36 @@ export function sanitizeFilePath(
   return path.join(dir, truncated + ext);
 }
 
-export const convertImgPathToUrl = (path: string): string => {
-  const filename = getFilename(path);
-  const ext = getExtension(path);
+export const getImgDirAmendment = (
+  filepath: string,
+  excludeDir: string = "temp",
+): string => {
+  // an img is saved like this in the temp folder ..../temp/[docu-uuid]/page-x.jpg
+  // and this is meant to return this part [docu-uuid]/page-x.jpg so you build the uploads url for nginx
+
+  let lastSlash = filepath.lastIndexOf("/");
+  console.log("=".repeat(30));
+  console.log("running for this filepath: ", filepath);
+  if (lastSlash === -1) return filepath;
+
+  const secondLastSlash = filepath.lastIndexOf("/", lastSlash - 1);
+  if (secondLastSlash === -1) return filepath.slice(lastSlash + 1);
+  if (filepath.slice(secondLastSlash + 1).startsWith(excludeDir)) {
+    console.warn(
+      `reslicing for this dir cause it includes ${excludeDir}: ${filepath}`,
+    );
+    console.log("=".repeat(30));
+    return filepath.slice(lastSlash + 1);
+  }
+  console.log(
+    `returning normal filepath slice: ${filepath.slice(secondLastSlash + 1)}`,
+  );
+  console.log("=".repeat(30));
+  return filepath.slice(secondLastSlash + 1);
+};
+
+export const convertImgPathToUrl = (filepath: string): string => {
+  const dirAmendment = getImgDirAmendment(filepath);
   const baseUrl: string = process.env.BASE_SITE_URL;
   const nginxPort: number = 7701;
   if (!baseUrl) {
@@ -198,7 +221,8 @@ export const convertImgPathToUrl = (path: string): string => {
       "couldnt retrieve base site url from the .env file(should be something like http://192.168.1.163) ",
     );
   }
-  return `${baseUrl}:${nginxPort.toString()}/uploads/${filename}.${ext}`;
+
+  return `${baseUrl}:${nginxPort.toString()}/uploads/${dirAmendment}`;
 };
 
 export const saveImgToTemp = async (
@@ -288,8 +312,10 @@ export async function uploadFiles(paths: string[] = []) {
   for (const filePath of paths) {
     const buffer = await fs.readFile(filePath);
 
-    const file = new File([buffer], path.basename(filePath));
+    const uuid = path.basename(path.dirname(filePath));
+    const fileName = path.basename(filePath);
 
+    const file = new File([buffer], `${uuid}/${fileName}`);
     form.append("file", file);
   }
 
@@ -305,6 +331,7 @@ export async function uploadFiles(paths: string[] = []) {
 
   return await res.json();
 }
+
 
 export const imgFilepathToArrayBuffer = async (
   filepath: string,

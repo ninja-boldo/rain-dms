@@ -155,7 +155,7 @@ export class QueueHandler {
     return res.json();
   }
 
-  private async fetchQueueData(queueName: string) {
+  async fetchQueueData(queueName: string) {
     return this.mgmtGet(
       `/queues/${this.encodedVhost()}/${encodeURIComponent(queueName)}`,
     );

@@ -31,7 +31,12 @@ export class FileMerger {
   }
 
   async mergeFile(file: OcrResult) {
-    console.log("now merging file with this path: ", file.originalFilePath);
+    console.log(
+      "now merging file with this path: ",
+      file.originalFilePath,
+      " and this banner img: ",
+      file.pages[0].bannerImgpath,
+    );
     if (file.pages.length === 0) {
       console.error(
         "the file ",

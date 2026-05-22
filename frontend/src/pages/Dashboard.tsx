@@ -357,9 +357,7 @@ function WorkerDownloadCard({
 }) {
   const [expanded, setExpanded] = React.useState(false);
   const share =
-    totalSystemDownloads > 0
-      ? worker.totalDownloads / totalSystemDownloads
-      : 0;
+    totalSystemDownloads > 0 ? worker.totalDownloads / totalSystemDownloads : 0;
   const isActive = worker.isConnected || worker.currentlyProcessing > 0;
   const isProcessing = worker.currentlyProcessing > 0;
 
@@ -477,7 +475,9 @@ function DownloadDistributionBar({
 
   // Assign each worker a hue band
   const hues = [210, 160, 45, 280, 10, 180, 340, 90];
-  const sorted = [...workers].sort((a, b) => b.totalDownloads - a.totalDownloads);
+  const sorted = [...workers].sort(
+    (a, b) => b.totalDownloads - a.totalDownloads,
+  );
 
   return (
     <div className={styles.distBarWrap}>
@@ -533,7 +533,9 @@ export default function Dashboard() {
   const [workersError, setWorkersError] = useState<string | null>(null);
 
   // Download stats per OCR worker
-  const [workerDownloadStats, setWorkerDownloadStats] = useState<WorkerDownloadRecord[]>([]);
+  const [workerDownloadStats, setWorkerDownloadStats] = useState<
+    WorkerDownloadRecord[]
+  >([]);
 
   // Peek panels
   const [ocrPeek, setOcrPeek] = useState<PeekedMessage[]>([]);
@@ -662,7 +664,6 @@ export default function Dashboard() {
           LIVE
         </div>
       </header>
-
       {/* Document stats */}
       <div className={styles.statsGrid}>
         <StatCard
@@ -709,7 +710,6 @@ export default function Dashboard() {
           }
         />
       </div>
-
       {/* Sparkline — only when active */}
       {anyActivity && (
         <div className={styles.section}>
@@ -721,7 +721,6 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-
       {/* Queues + ETA */}
       <div className={styles.section}>
         <div className={styles.sectionRow}>
@@ -828,7 +827,6 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-
       {/* OCR Workers */}
       <div className={styles.section}>
         <div className={styles.sectionRow}>
@@ -866,7 +864,6 @@ export default function Dashboard() {
           <p className={styles.workerNone}>Keine Worker registriert</p>
         )}
       </div>
-
       {/* Worker Download Distribution */}
       <div className={styles.section}>
         <div className={styles.sectionRow}>
@@ -907,8 +904,8 @@ export default function Dashboard() {
           </>
         )}
       </div>
-
-      {/* Merge Workers */}      <div className={styles.section}>
+      {/* Merge Workers */}{" "}
+      <div className={styles.section}>
         <div className={styles.sectionRow}>
           <p className={styles.sectionTitle}>Merge Worker</p>
           {queueAvail && (

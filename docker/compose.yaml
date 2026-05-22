@@ -1,40 +1,104 @@
 services:
+  # ── Hono/Bun API backend ────────────────────────────────────────────────────
+  #backend:
+  #  build:
+  #    context: ./backend
+  #    dockerfile: Dockerfile   # create a simple Bun Dockerfile if you don't have one
+  #  container_name: rain-dms-backend
+  #  restart: unless-stopped
+  #  ports:
+  #    - "3000:3000"
+  #  environment:
+  #    # Change all of these before deploying
+  #    DATABASE_URL:              postgres://dms_user:dms_pass@db:5432/dms
+  #    AMQP_URL:                  amqp://guest:guest@rabbitmq:5672
+  #    RABBITMQ_MANAGEMENT_URL:   http://rabbitmq:15672
+  #    RABBITMQ_USER:             guest
+  #    RABBITMQ_PASS:             guest
+  #    MEILI_HOST:                http://meilisearch:7700
+  #    MEILI_MASTER_KEY:          "changeme-meili-master-key-min-16-chars"
+  #    # Generate with: openssl rand -hex 32
+  #    JWT_SECRET:                "changeme-jwt-secret-at-least-32-chars-long"
+  #    # Must match where nginx serves /uploads/ from (inside container)
+  #    ROOT_DIR:                  /vault
+  #    # Your frontend's actual origin — no trailing slash
+  #    CORS_ORIGIN:               "http://localhost:5173"
+  #    NODE_ENV:                  production
+  #  volumes:
+  #    # Mount the shared vault root inside the backend container
+  #    - ./vault:/vault
+  #  depends_on:
+  #    db:
+  #      condition: service_healthy
+  #    rabbitmq:
+  #      condition: service_healthy
+  #    meilisearch:
+  #      condition: service_started
+  #  networks:
+  #    - dms
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: rain-dms-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       dms
+      POSTGRES_USER:     dms_user
+      POSTGRES_PASSWORD: dms_pass
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dms_user -d dms"]
+      interval: 5s
+      retries: 5
+
+  # ── Meilisearch ──────────────────────────────────────────────────────────────
   meilisearch:
     image: getmeili/meilisearch:latest
     container_name: meilisearch
-    ports:
-      - "7700:7700"
+    restart: unless-stopped
     volumes:
       - ./meili_data:/meili_data
     environment:
-      MEILI_ENV: development
-      MEILI_MASTER_KEY: "masterbenno"
-      MEILI_DB_PATH: /meili_data
+      MEILI_ENV:        production
+      MEILI_MASTER_KEY: masterbennomasterbennomasterbennomasterbenno
+      MEILI_DB_PATH:    /meili_data
+    ports:
+      - "7700:7700"
+
+
+  # ── Nginx (static file server for banner images) ─────────────────────────────
   nginx:
     image: nginx:latest
-    container_name: nginx
+    container_name: rain-dms-nginx
+    restart: unless-stopped
     ports:
       - "7701:80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+
       - ../temp:/var/www/uploads
+
+
+  # ── RabbitMQ ─────────────────────────────────────────────────────────────────
   rabbitmq:
     image: rabbitmq:4-management
     container_name: rabbitmq
     restart: unless-stopped
     ports:
-      - "5672:5672" # AMQP default port
-      - "15672:15672" # Management UI
-      - "1883:1883" # MQTT port (must be exposed manually)
+      - "5672:5672"  
+      - "15672:15672" 
     environment:
-      RABBITMQ_HOST: "%"
       RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_PASS: guest  
     healthcheck:
-      test:
-        - CMD
-        - rabbitmq-diagnostics
-        - "-q"
-        - ping
-      retries: 3
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      retries: 5
       timeout: 5s
+
+
+volumes:
+  pgdata:
+

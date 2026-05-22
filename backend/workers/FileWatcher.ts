@@ -55,7 +55,7 @@ export const FileWatcher = async (rootPath: string) => {
         console.error("Rename failed:", err);
         finalPath = path; // Fallback to original path if rename fails
       }
-      
+
       console.log("Sending to queue:", finalPath);
       await queueHandlerObj.sendMsg(finalPath, QueueNames.startOcrQueue);
     });

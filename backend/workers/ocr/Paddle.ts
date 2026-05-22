@@ -3,7 +3,8 @@ import { PaddleOcrResult, PaddleOcrService } from "ppu-paddle-ocr";
 import { parseRawPagesPaddleOcr, pdfToImgPages, uploadFiles } from "./utils";
 import { OcrResult, PaddleRecognitionModel } from "../../utils/types/main";
 require("dotenv").config();
-import { readFile } from "fs/promises";
+import { readFile, copyFile, mkdir } from "fs/promises";
+import path from "path";
 
 // Runs at most `limit` async tasks concurrently.
 // Preserves input order in the returned array.
@@ -72,9 +73,25 @@ export class PaddleJsOcr {
     }
 
     const isPdf = filePath.toLowerCase().endsWith(".pdf");
-    const imageFiles: string[] = isPdf
-      ? await pdfToImgPages(filePath, this.tempFolder!)
-      : [filePath];
+
+    let imageFiles: string[];
+    if (isPdf) {
+      imageFiles = await pdfToImgPages(filePath, this.tempFolder!);
+    } else {
+      // For image files (PNG/JPEG) the original document IS the only "page".
+      // We must copy it into tempFolder rather than referencing the source
+      // path directly: FileMerger will move the original file after processing,
+      // and remote workers need to upload the banner back to the server via
+      // uploadFiles — both require a stable copy in tempFolder.
+      const ext = path.extname(filePath); // e.g. ".png"
+      const destPath = path.join(
+        this.tempFolder!,
+        `${Date.now()}_0_${crypto.randomUUID()}${ext}`,
+      );
+      await mkdir(this.tempFolder!, { recursive: true });
+      await copyFile(filePath, destPath);
+      imageFiles = [destPath];
+    }
 
     const ocrResults = await pMap(
       imageFiles,
@@ -82,7 +99,7 @@ export class PaddleJsOcr {
         console.log(`OCR page ${i + 1}/${imageFiles.length}: ${imgPath}`);
         try {
           const imageBuffer = await readFile(imgPath);
-          
+
           const result = await this.model!.recognize(imageBuffer.buffer);
           return { bannerImgPath: imgPath, result } as {
             bannerImgPath: string;

@@ -2,10 +2,12 @@ import { Meilisearch } from "meilisearch";
 import { documentsTable, pagesTable } from "../db/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, gt, asc } from "drizzle-orm";
+import "dotenv/config";
+ 
 
 const client = new Meilisearch({
   host: "http://127.0.0.1:7700",
-  apiKey: "masterbenno",
+  apiKey: process.env.MEILI_MASTER_KEY,
 });
 
 const db = drizzle(process.env.DATABASE_URL!);
