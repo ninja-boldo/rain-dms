@@ -1,9 +1,11 @@
+import { sign, verify } from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import "dotenv/config";
 import { Pool } from "pg";
-import { documentsTable, pagesTable } from "./db/schema";
+import { usersTable, documentsTable, pagesTable } from "./db/schema";
 import { eq, desc, asc, sql } from "drizzle-orm";
 import { Meilisearch } from "meilisearch";
 import { syncIndex } from "./workers/IndexBuilder";
@@ -106,6 +108,32 @@ async function saveFileToDisk(file: File, filePath: string): Promise<void> {
 // --------------------
 // Routes
 // --------------------
+
+/*
+ * Auth Routes
+ */
+app.post("/auth/signup", async (c) => {
+  const { username, password } = await c.req.json();
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  try {
+    await db.insert(usersTable).values({ username, password_hash: hashedPassword });
+    return c.json({ message: "User created" }, 201);
+  } catch {
+    return c.json({ error: "User already exists" }, 409);
+  }
+});
+
+app.post("/auth/signin", async (c) => {
+  const { username, password } = await c.req.json();
+  const user = await db.select().from(usersTable).where(eq(usersTable.username, username));
+  if (user.length === 0 || !(await bcrypt.compare(password, user[0].password_hash))) {
+    return c.json({ error: "Invalid credentials" }, 401);
+  }
+
+  const token = sign({ userId: user[0].id }, process.env.JWT_SECRET || "supersecret");
+  return c.json({ token });
+});
 
 /*
  * GET /stats
