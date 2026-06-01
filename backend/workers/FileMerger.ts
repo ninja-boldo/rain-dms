@@ -53,6 +53,16 @@ export class FileMerger {
     const currentDate = new Date();
     const nowTimestamp = currentDate.toISOString().replace(/:/g, "-");
     const newFilename: string = `${getFilename(file.originalFilePath)}-${uuidv4()}-${nowTimestamp.toString()}.${getExtension(file.originalFilePath)}`;
+    
+    // Extract userId from path if it exists (e.g. .../consume_files/1/file.pdf)
+    const pathParts = file.originalFilePath.split(/\/|\\/);
+    const consumeIndex = pathParts.findIndex(p => p === "consume_files" || p === "temp");
+    let userId: number | null = null;
+    if (consumeIndex !== -1 && consumeIndex < pathParts.length - 2) {
+      const parsedUserId = parseInt(pathParts[consumeIndex + 1], 10);
+      if (!isNaN(parsedUserId)) userId = parsedUserId;
+    }
+
     const newPath: string = `${this.newOrigPath}/${newFilename}`;
 
     try {
@@ -73,6 +83,7 @@ export class FileMerger {
         filepath: newPath,
         createdAt: currentDate,
         assigned_tags: [],
+        user_id: userId,
       })
       .returning();
 

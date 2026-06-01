@@ -39,6 +39,7 @@ async function runSync() {
         filepath: documentsTable.filepath,
         created_at: documentsTable.createdAt,
         assigned_tags: documentsTable.assigned_tags,
+        user_id: documentsTable.user_id,
         ocr: pagesTable.ocr,
         banner_img: pagesTable.page_banner_url,
         pageIdx: pagesTable.page_idx,
@@ -99,6 +100,8 @@ async function runSync() {
         searchable_text: searchableText,
         banner_img: doc.banner_img,
         created_at: doc.created_at,
+        user_id: doc.user_id,
+        ocr: doc.ocr, // Store full OCR here for the frontend!
       };
     });
 
@@ -123,6 +126,7 @@ export async function syncIndex(intervalMs = 15000) {
     "assigned_tags",
     "file_id",
     "pageIdx",
+    "user_id",
   ]);
   await index.updateSearchableAttributes([
     "searchable_text",

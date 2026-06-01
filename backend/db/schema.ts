@@ -28,3 +28,11 @@ export const pagesTable = pgTable("pages", {
   page_banner_url: text("page_banner_url"),
   ocr: jsonb("ocr").notNull(),
 });
+
+export const workerTable = pgTable("workers", {
+  id: varchar({ length: 255 }).primaryKey(),
+  ip: varchar({ length: 255 }).notNull(),
+  status: varchar({ length: 50 }).notNull().default('pending'), // pending, approved, blocked
+  bytes_downloaded: integer().default(0),
+  first_seen_at: timestamp("first_seen_at").defaultNow(),
+});

@@ -56,6 +56,75 @@ app.use(
   }),
 );
 
+function getClientIp(c: any): string {
+  const bunIp = c.env?.requestIP?.(c.req.raw)?.address;
+  if (bunIp) return bunIp;
+
+  return (
+    c.req.header("x-real-ip") ||
+    (c.req.header("x-forwarded-for") || "").split(",")[0].trim() ||
+    "unknown"
+  );
+}
+
+// Worker auth middleware
+app.use("/worker-api/*", async (c, next) => {
+  const ip = getClientIp(c);
+  const workerRes = await db.select().from(workerTable).where(eq(workerTable.ip, ip));
+  
+  if (workerRes.length === 0) {
+    const newId = crypto.randomUUID();
+    await db.insert(workerTable).values({ id: newId, ip: ip, status: "pending" });
+    return c.json({ error: "Worker not approved yet. IP logged for approval." }, 403);
+  }
+  
+  if (workerRes[0].status !== "approved") {
+    return c.json({ error: "Worker not approved." }, 403);
+  }
+  
+  await next();
+});
+
+// User Auth middleware
+app.use("*", async (c, next) => {
+  const path = c.req.path;
+  if (path.startsWith("/auth/") || path.startsWith("/worker-api/") || path === "/health") {
+    return next();
+  }
+
+  // Try token first
+  const authHeader = c.req.header("Authorization");
+  const token = authHeader?.split(" ")[1] || c.req.query("token");
+
+  if (token) {
+    try {
+      const payload = verify(token, process.env.JWT_SECRET || "supersecret") as { userId: number };
+      c.set("userId", payload.userId);
+      return await next();
+    } catch (err) {
+      return c.json({ error: "Invalid token" }, 401);
+    }
+  }
+
+  // No token: for certain endpoints allow approved workers by IP
+  const ip = getClientIp(c);
+  if (path.startsWith("/download/consume") || path.startsWith("/worker-api/")) {
+    try {
+      const w = await db.select().from(workerTable).where(eq(workerTable.ip, ip));
+      if (w.length > 0 && w[0].status === "approved") {
+        // mark workerId on context
+        c.set("workerIp", ip);
+        return await next();
+      }
+    } catch (e) {
+      console.error("worker lookup failed:", e);
+    }
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
+  return c.json({ error: "Unauthorized" }, 401);
+});
+
 // --------------------
 // Background sync
 // --------------------
@@ -234,6 +303,30 @@ app.get("/workers", async (c) => {
   }
 });
 
+// ---- Admin: manage workers ----
+app.get("/admin/workers", async (c) => {
+  const userId = c.get("userId");
+  if (!userId || Number(userId) !== 1) return c.json({ error: "Forbidden" }, 403);
+  const rows = await db.select().from(workerTable);
+  return c.json({ workers: rows });
+});
+
+app.post("/admin/workers/:id/approve", async (c) => {
+  const userId = c.get("userId");
+  if (!userId || Number(userId) !== 1) return c.json({ error: "Forbidden" }, 403);
+  const id = c.req.param("id");
+  await db.update(workerTable).set({ status: "approved" }).where(eq(workerTable.id, id));
+  return c.json({ ok: true });
+});
+
+app.post("/admin/workers/:id/block", async (c) => {
+  const userId = c.get("userId");
+  if (!userId || Number(userId) !== 1) return c.json({ error: "Forbidden" }, 403);
+  const id = c.req.param("id");
+  await db.update(workerTable).set({ status: "blocked" }).where(eq(workerTable.id, id));
+  return c.json({ ok: true });
+});
+
 /**
  * GET /queue-peek?target=ocr|merge&count=5
  */
@@ -274,9 +367,12 @@ app.get("/main_page", async (c) => {
   const pageIdx = Number(c.req.query("pageIdx") ?? 0);
   const limit = 50;
   const offset = pageIdx * limit;
+  const userId = c.get("userId");
 
   const [countRes, res] = await Promise.all([
-    db.select({ count: sql`count(*)`.mapWith(Number) }).from(documentsTable),
+    db.select({ count: sql`count(*)`.mapWith(Number) })
+      .from(documentsTable)
+      .where(eq(documentsTable.user_id, userId)),
     db
       .select({
         filepath: documentsTable.filepath,
@@ -286,7 +382,7 @@ app.get("/main_page", async (c) => {
       })
       .from(documentsTable)
       .innerJoin(pagesTable, eq(documentsTable.file_id, pagesTable.file_id))
-      .where(eq(pagesTable.page_idx, 0))
+      .where(sql`${pagesTable.page_idx} = 0 AND ${documentsTable.user_id} = ${userId}`)
       .orderBy(desc(documentsTable.createdAt))
       .limit(limit)
       .offset(offset),
@@ -315,7 +411,8 @@ app.get("/search", async (c) => {
   }
 
   const cleanQuery = rawQuery.replace(tagRegex, "").trim();
-  let finalFilter: string[] = [...tags];
+  const userId = c.get("userId");
+  let finalFilter: string[] = [`user_id = ${userId}`, ...tags];
 
   const extraFilter = c.req.query("filter");
   if (extraFilter) {
@@ -374,17 +471,6 @@ app.delete("/delete/consume", async (c) => {
   return c.text("Deleted", 200);
 });
 
-function getClientIp(c: any): string {
-  const bunIp = c.env?.requestIP?.(c.req.raw)?.address;
-  if (bunIp) return bunIp;
-
-  return (
-    c.req.header("x-real-ip") ||
-    (c.req.header("x-forwarded-for") || "").split(",")[0].trim() ||
-    "unknown"
-  );
-}
-
 /**
  * GET /download/consume?filepath=...&attachment=0|1
  */
@@ -414,7 +500,41 @@ app.get("/download/consume", async (c) => {
   } catch {
     /* non-fatal */
   }
+  // Check permissions: either an authenticated user who owns the document OR an approved worker IP
+  const userId = c.get("userId");
+  const ctxWorkerIp = c.get("workerIp");
+
+  // If userId present, verify ownership of document
+  if (userId) {
+    const owner = await db
+      .select({ user_id: documentsTable.user_id })
+      .from(documentsTable)
+      .where(eq(documentsTable.filepath, filepath));
+    if (owner.length === 0 || owner[0].user_id !== Number(userId)) {
+      return c.text("Forbidden", 403);
+    }
+  } else if (!ctxWorkerIp) {
+    // Neither user nor approved worker
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
+  // Record download in runtime stats
   queueHandler.recordAgentDownload(workerIp, filename, fileBytes);
+
+  // Persist bytes to worker table if this request came from a worker
+  if (ctxWorkerIp) {
+    try {
+      const rows = await db.select().from(workerTable).where(eq(workerTable.ip, ctxWorkerIp));
+      if (rows.length === 0) {
+        await db.insert(workerTable).values({ id: crypto.randomUUID(), ip: ctxWorkerIp, status: "approved", bytes_downloaded: fileBytes });
+      } else {
+        const current = Number(rows[0].bytes_downloaded || 0);
+        await db.update(workerTable).set({ bytes_downloaded: current + fileBytes }).where(eq(workerTable.ip, ctxWorkerIp));
+      }
+    } catch (e) {
+      console.error("Failed to persist worker download stats:", e);
+    }
+  }
 
   // ✅ FIX 3: use shared streamFile helper (has error listener)
   return streamFile(
@@ -523,18 +643,19 @@ async function handleUpload(c: any, uploadDir: string): Promise<Response> {
  * POST /upload/temp
  */
 app.post("/upload/temp", async (c) => {
-  const uploadDir = path.join(process.cwd(), "../temp");
-  await fs.mkdir(uploadDir, { recursive: true }, (err) => {
-    if (err) throw err;
-  });
+  const userId = c.get("userId");
+  const uploadDir = path.join(process.cwd(), "../temp", userId ? String(userId) : "public");
+  await fs.promises.mkdir(uploadDir, { recursive: true });
   return handleUpload(c, uploadDir);
 });
 
 /**
  * POST /upload/consume
  */
-app.post("/upload/consume", (c) => {
-  const uploadDir = path.join(process.cwd(), "../consume_files");
+app.post("/upload/consume", async (c) => {
+  const userId = c.get("userId");
+  const uploadDir = path.join(process.cwd(), "../consume_files", userId ? String(userId) : "public");
+  await fs.promises.mkdir(uploadDir, { recursive: true });
   return handleUpload(c, uploadDir);
 });
 
