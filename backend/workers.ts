@@ -1,5 +1,3 @@
-import "./workers/ocr/pdfjs-polyfill";
-
 import path from "path";
 import { FileMerger } from "./workers/FileMerger";
 import { FileProcessor } from "./workers/FileProcessor";
@@ -15,10 +13,9 @@ const parentDir = path.resolve(__dirname, "..");
 
 const root = process.env.ROOT_DIR ?? parentDir;
 const consumeFolder = path.join(root, ImportantDirs.consume);
-const consumedFolder = path.join(root, ImportantDirs.consumed);
 const tempFolder = path.join(root, ImportantDirs.temp);
 
-const dirs = [root, consumeFolder, consumedFolder, tempFolder];
+const dirs = [root, consumeFolder, tempFolder];
 
 for (const dir of dirs) {
   fs.mkdirSync(dir, { recursive: true });
@@ -28,13 +25,9 @@ for (const dir of dirs) {
 console.log("AMQP:", process.env.AMQP_URL);
 
 await Promise.all([
-  Promise.resolve(
-    FileWatcher(
-      "/Users/bennetjollenbeck/Desktop/programming/web/react/family_projects/rain-dms",
-    ),
-  ),
+  Promise.resolve(FileWatcher(root)),
 
-  //new FileProcessor().init("en", tempFolder),
+  new FileProcessor().init(tempFolder),
 
-  new FileMerger(consumedFolder).init(),
+  new FileMerger().init(),
 ]);

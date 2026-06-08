@@ -1,135 +1,285 @@
-import "./pdfjs-polyfill";
-import { PaddleOcrResult, PaddleOcrService } from "ppu-paddle-ocr";
-import { parseRawPagesPaddleOcr, pdfToImgPages, uploadFiles } from "./utils";
-import { OcrResult, PaddleRecognitionModel } from "../../utils/types/main";
-require("dotenv").config();
-import { readFile, copyFile, mkdir } from "fs/promises";
+import os from "os";
+import { promises as fs } from "fs";
 import path from "path";
+import { Worker } from "worker_threads";
+import pLimit from "p-limit";
+import pc from "picocolors";
+import { OcrResult, PageOcr, LineOcr } from "../../utils/types/main";
+import { uploadManyS3, pdfToImgPages, imgToWebp, hashFile } from "./utils";
+import "dotenv/config";
+import { S3Client } from "@aws-sdk/client-s3";
 
-// Runs at most `limit` async tasks concurrently.
-// Preserves input order in the returned array.
-async function pMap<T, R>(
-  items: T[],
-  fn: (item: T, index: number) => Promise<R>,
-  limit: number,
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let next = 0;
+const MAX_WORKERS = process.env.MAX_WORKERS
+  ? parseInt(process.env.MAX_WORKERS)
+  : 1;
+const CORE_FACTOR = 0.5;
+const factoredCoreCount = Math.round(os.cpus().length * CORE_FACTOR);
+const WORKER_COUNT = Math.max(1, Math.min(MAX_WORKERS, factoredCoreCount));
+const WEBP_CONCURRENCY = Math.min(2, os.cpus().length);
+const PDF_DPI = 100;
+const webpLimit = pLimit(WEBP_CONCURRENCY);
 
-  async function worker() {
-    while (next < items.length) {
-      const i = next++;
-      results[i] = await fn(items[i], i);
-    }
+interface PendingOcr {
+  resolve: (results: any[]) => void;
+  reject: (err: Error) => void;
+}
+
+class OcrWorker {
+  private readonly worker: Worker;
+  private readonly pending = new Map<number, PendingOcr>();
+  private nextId = 0;
+  private readonly readyPromise: Promise<void>;
+
+  constructor() {
+    this.worker = new Worker(new URL("./paddle-worker.ts", import.meta.url));
+    let markReady!: () => void;
+    this.readyPromise = new Promise<void>((res) => (markReady = res));
+
+    this.worker.on("message", (msg: any) => {
+      if (msg.type === "ready") {
+        markReady();
+        return;
+      }
+
+      const { id, ok, results, error, fatal } = msg;
+      const handler = this.pending.get(id);
+      if (!handler) return;
+      this.pending.delete(id);
+
+      if (ok) {
+        handler.resolve(results);
+      } else {
+        if (fatal) {
+          console.error(
+            pc.bold(
+              pc.red(
+                "❌ [CRITICAL] Kreuzberg native binding corrupted — exiting",
+              ),
+            ),
+          );
+          process.exit(1);
+        }
+        handler.reject(new Error(error));
+      }
+    });
+
+    this.worker.on("error", (err) => {
+      console.error(pc.red("[OcrWorker] Uncaught worker error:"), err);
+      for (const h of this.pending.values()) h.reject(err);
+      this.pending.clear();
+      process.exit(1);
+    });
+
+    this.worker.on("exit", (code) => {
+      if (code === 0) return;
+      const err = new Error(`OcrWorker exited with code ${code}`);
+      for (const h of this.pending.values()) h.reject(err);
+      this.pending.clear();
+      process.exit(1);
+    });
   }
 
-  const workers = Array.from({ length: Math.min(limit, items.length) }, worker);
-  await Promise.all(workers);
-  return results;
+  ready(): Promise<void> {
+    return this.readyPromise;
+  }
+
+  run(paths: string[]): Promise<any[]> {
+    return new Promise<any[]>((resolve, reject) => {
+      const id = ++this.nextId;
+      this.pending.set(id, { resolve, reject });
+      this.worker.postMessage({ id, paths });
+    });
+  }
+
+  terminate(): void {
+    this.worker.terminate();
+  }
+}
+
+class OcrWorkerPool {
+  private readonly workers: OcrWorker[];
+  private readonly readyPromise: Promise<void>;
+
+  constructor(count: number) {
+    this.workers = Array.from({ length: count }, () => new OcrWorker());
+    this.readyPromise = Promise.all(this.workers.map((w) => w.ready())).then(
+      () => {},
+    );
+  }
+
+  ready(): Promise<void> {
+    return this.readyPromise;
+  }
+
+  async runAll(paths: string[]): Promise<any[]> {
+    if (paths.length === 0) return [];
+    const activeCount = Math.min(this.workers.length, paths.length);
+    const chunkSize = Math.ceil(paths.length / activeCount);
+
+    const chunkPromises = Array.from({ length: activeCount }, (_, i) => {
+      const chunk = paths.slice(i * chunkSize, (i + 1) * chunkSize);
+      return this.workers[i].run(chunk);
+    });
+
+    return (await Promise.all(chunkPromises)).flat();
+  }
+
+  terminate(): void {
+    for (const w of this.workers) w.terminate();
+  }
 }
 
 export class PaddleJsOcr {
-  private lang: string;
-  private model: PaddleOcrService | null = null;
-  private tempFolder: string | null = null;
-  // How many pages to OCR concurrently. PaddleOCR is CPU/GPU-bound;
-  // going above 4 typically hurts throughput and risks OOM on large docs.
-  private readonly ocrConcurrency: number;
-  private modelBaseUrl: string =
-    "https://media.githubusercontent.com/media/PT-Perkasa-Pilar-Utama/ppu-paddle-ocr-models/main";
-  private modelNameToUrl: { [modelName: string]: string } = {
-    "PP-OCRv5-mobile-en": `${this.modelBaseUrl}/recognition/multi/en/v5/en_PP-OCRv5_mobile_rec_infer.ort`,
-    "PP-OCRv5-mobile-de": `${this.modelBaseUrl}/recognition/multi/latin/v5/latin_PP-OCRv5_mobile_rec_infer.onnx`,
-  };
+  private readonly tempFolder: string;
+  private readonly pool: OcrWorkerPool;
 
-  constructor(
-    lang: string = "eng",
-    tempFolder: string,
-    ocrConcurrency: number = 3,
-  ) {
-    this.lang = lang;
+  constructor(tempFolder: string) {
     this.tempFolder = tempFolder;
-    this.ocrConcurrency = ocrConcurrency;
+    this.pool = new OcrWorkerPool(WORKER_COUNT);
   }
 
-  async init(
-    model: PaddleRecognitionModel = PaddleRecognitionModel.PP_OCRv5_mobile_de,
-  ) {
-    const service = new PaddleOcrService({
-      recognition: { strategy: "per-box" },
-    });
-    await service.initialize();
-    this.model = service;
-    return this;
+  async warmup(): Promise<void> {
+    await fs.mkdir(this.tempFolder, { recursive: true });
+    await this.pool.ready();
   }
 
-  async getOcr(
-    filePath: string,
-    origServerPath: string | null = null,
-    isRemote: boolean = false,
-  ): Promise<OcrResult> {
-    if (!this.model) {
-      throw new Error("OCR model not initialized. Call init() first.");
-    }
+  private memMB(): number {
+    return Math.round(process.memoryUsage().rss / 1024 / 1024);
+  }
 
+  async getOcr(s3: S3Client, filePath: string): Promise<OcrResult> {
+    const fileHash: string = await hashFile(filePath);
     const isPdf = filePath.toLowerCase().endsWith(".pdf");
+    await fs.mkdir(this.tempFolder, { recursive: true });
 
-    let imageFiles: string[];
-    if (isPdf) {
-      imageFiles = await pdfToImgPages(filePath, this.tempFolder!);
-    } else {
-      // For image files (PNG/JPEG) the original document IS the only "page".
-      // We must copy it into tempFolder rather than referencing the source
-      // path directly: FileMerger will move the original file after processing,
-      // and remote workers need to upload the banner back to the server via
-      // uploadFiles — both require a stable copy in tempFolder.
-      const ext = path.extname(filePath); // e.g. ".png"
-      const destPath = path.join(
-        this.tempFolder!,
-        `${Date.now()}_0_${crypto.randomUUID()}${ext}`,
-      );
-      await mkdir(this.tempFolder!, { recursive: true });
-      await copyFile(filePath, destPath);
-      imageFiles = [destPath];
+    const globalStart = performance.now();
+    const baseName = path.basename(filePath);
+
+    // --- IMAGE MODE ---
+    if (!isPdf) {
+      const ocrPromise = this.pool.runAll([filePath]);
+      const webpPath = await imgToWebp(filePath, false);
+      const [s3Url] = await uploadManyS3(s3, [webpPath], true);
+      const [rawRes] = await ocrPromise;
+
+      if (typeof Bun !== "undefined" && typeof Bun.gc === "function")
+        Bun.gc(true);
+
+      return {
+        pages: [this.mapPageTokens(rawRes, 1, s3Url)],
+        originalFilePath: filePath,
+        fileHash,
+      };
     }
 
-    const ocrResults = await pMap(
-      imageFiles,
-      async (imgPath, i) => {
-        console.log(`OCR page ${i + 1}/${imageFiles.length}: ${imgPath}`);
-        try {
-          const imageBuffer = await readFile(imgPath);
+    // --- PDF MODE ---
+    let jpgPaths: string[] = [];
+    const popplerStart = performance.now();
 
-          const result = await this.model!.recognize(imageBuffer.buffer);
-          return { bannerImgPath: imgPath, result } as {
-            bannerImgPath: string;
-            result: PaddleOcrResult;
-          };
-        } catch (error) {
-          console.error(`OCR failed on page ${i + 1} (${imgPath}): ${error}`);
-          throw error;
-        }
-      },
-      this.ocrConcurrency,
-    );
-
-    // Build pagesRaw preserving page order (pMap already guarantees order).
-    const pagesRaw: { [imgFilePath: string]: PaddleOcrResult } =
-      Object.fromEntries(
-        ocrResults.map(({ bannerImgPath, result }) => [bannerImgPath, result]),
-      );
-
-    const pagesParsed: OcrResult = await parseRawPagesPaddleOcr(
-      pagesRaw,
-      origServerPath ?? filePath,
-    );
-
-    if (isRemote) {
-      const bannerImgs = pagesParsed.pages.map((page) => page.bannerImgpath);
-      console.log("uploading banner imgs to remote server");
-      await uploadFiles(bannerImgs);
+    try {
+      jpgPaths = await pdfToImgPages(filePath, this.tempFolder, PDF_DPI);
+    } catch (err: any) {
+      await fs.rm(filePath, { force: true }).catch(() => {});
+      throw new Error(`UNREADABLE_PDF_CORRUPTION: ${err.message}`);
     }
 
-    return pagesParsed;
+    const popplerMs = performance.now() - popplerStart;
+    const totalPages = jpgPaths.length;
+
+    if (totalPages === 0) {
+      await fs.rm(filePath, { force: true }).catch(() => {});
+      return { pages: [], originalFilePath: filePath, fileHash };
+    }
+
+    const popplerDir = path.dirname(jpgPaths[0]);
+    const activeWorkers = Math.min(WORKER_COUNT, totalPages);
+
+    console.log(
+      [
+        pc.cyan(
+          `┌── PADDLE OCR LOADING ────────────────────────────────────────────────`,
+        ),
+        `│ ${pc.bold("DOC:")} ${pc.white(baseName)} │ ${pc.bold("PAGES:")} ${pc.yellow(totalPages)} │ ${pc.bold("WORKERS:")} ${pc.green(`${activeWorkers}/${WORKER_COUNT}`)} │ ${pc.bold("RAM:")} ${pc.magenta(this.memMB() + "MB")} │ ${pc.bold("POPPLER:")} ${pc.gray((popplerMs / 1000).toFixed(2) + "s")}`,
+        pc.cyan(
+          `└──────────────────────────────────────────────────────────────────────`,
+        ),
+      ].join("\n"),
+    );
+
+    try {
+      const pipelineStart = performance.now();
+
+      const rawResults = await this.pool.runAll(jpgPaths);
+      const webpUploadPromise = Promise.all(
+        jpgPaths.map((p) => webpLimit(() => imgToWebp(p, true))),
+      ).then((webpPaths) => uploadManyS3(s3, webpPaths, true));
+
+      const finalPageUrls = await webpUploadPromise;
+      const pipelineMs = performance.now() - pipelineStart;
+
+      const pages: PageOcr[] = rawResults.map((rawRes, idx) =>
+        this.mapPageTokens(rawRes, idx + 1, finalPageUrls[idx] ?? ""),
+      );
+
+      if (typeof Bun !== "undefined" && typeof Bun.gc === "function")
+        Bun.gc(true);
+
+      console.log(
+        [
+          pc.green(
+            `┌── OCR COMPLETE ──────────────────────────────────────────────────────`,
+          ),
+          `│ ${pc.bold("DOC:")} ${pc.white(baseName)} (${pc.yellow(totalPages)}p) │ ${pc.bold("RAM:")} ${pc.magenta(this.memMB() + "MB")} │ ${pc.bold("TIME:")} Pip: ${pc.cyan((pipelineMs / 1000).toFixed(2) + "s")} ∥ Tot: ${pc.bold(pc.green(((performance.now() - globalStart) / 1000).toFixed(2) + "s"))}`,
+          pc.green(
+            `└──────────────────────────────────────────────────────────────────────`,
+          ),
+        ].join("\n"),
+      );
+
+      return { pages, originalFilePath: filePath, fileHash };
+    } finally {
+      await fs.rm(popplerDir, { recursive: true, force: true }).catch(() => {});
+      await fs.rm(filePath, { force: true }).catch(() => {});
+    }
+  }
+
+  private mapPageTokens(
+    rawRes: any,
+    pageNumber: number,
+    bannerImgpath: string,
+  ): PageOcr {
+    const rawElements: any[] = rawRes?.ocrElements ?? rawRes?.elements ?? [];
+
+    const lines: LineOcr[] = rawElements.map((el): LineOcr => {
+      const points: number[][] = el.geometry?.points ?? [];
+
+      let minX = 0,
+        minY = 0,
+        maxX = 0,
+        maxY = 0;
+      if (points.length > 0) {
+        const xs = points.map((p) => p[0]);
+        const ys = points.map((p) => p[1]);
+        minX = Math.min(...xs);
+        maxX = Math.max(...xs);
+        minY = Math.min(...ys);
+        maxY = Math.max(...ys);
+      }
+
+      return {
+        boxes: [
+          {
+            text: el.text ?? el.content ?? "",
+            confidence: el.confidence?.recognition ?? null,
+            boundingBox: {
+              upLeftPoint: { x: minX, y: minY },
+              downRightPoint: { x: maxX, y: maxY },
+            },
+          },
+        ],
+      };
+    });
+
+    return { pageNumber, lines, bannerImgpath };
   }
 }

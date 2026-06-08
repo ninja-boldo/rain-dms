@@ -1,4 +1,11 @@
-FROM debian:bookworm-slim AS base
+FROM oven/bun:slim
+WORKDIR /app
+
+ENV LD_PRELOAD="/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4"
+ENV OMP_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
+ENV ONNXRUNTIME_NUM_THREADS=1
 
 RUN apt-get update && apt-get install -y \
     curl \
@@ -13,38 +20,16 @@ RUN apt-get update && apt-get install -y \
     libxrender1 \
     poppler-data \
     poppler-utils \
-    && rm -rf /var/lib/apt/lists/* 
+    libgoogle-perftools4 \
+    libopenblas-dev \
+    libopenblas0 \
+    libonnxruntime-dev \
+    && rm -rf /var/lib/apt/lists/*
 
+COPY package.json bun.lock ./
+COPY ../backend/ ./backend/
 
+RUN cd backend && bun install --frozen-lockfile
 
-# install bun
-ENV BUN_INSTALL=/usr/local/bun
-ENV PATH=$BUN_INSTALL/bin:$PATH
-RUN curl -fsSL https://bun.sh/install | bash
-
-WORKDIR /app
-
-# =========================
-# Install dependencies stage
-# =========================
-FROM base AS installer
-WORKDIR /app
-
-COPY package.json ./
-
-RUN bun install 
-
-COPY backend/ ./backend
-
-
-# =========================
-# Runtime stage
-# =========================
-FROM base
-WORKDIR /app
-
-COPY --from=installer /app ./
-
-USER root
-
-CMD ["bun", "run", "backend/workers/FileProcessor.ts"]
+WORKDIR /app/backend
+CMD ["bun", "run", "./start_ocr.ts"]

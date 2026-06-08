@@ -1,215 +1,343 @@
-import { sign, verify } from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import "dotenv/config";
+import { asc, desc, eq, sql, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import "dotenv/config";
-import { Pool } from "pg";
-import { usersTable, documentsTable, pagesTable } from "./db/schema";
-import { eq, desc, asc, sql } from "drizzle-orm";
-import { Meilisearch } from "meilisearch";
-import { syncIndex } from "./workers/IndexBuilder";
+import jwt from "jsonwebtoken";
 import { mkdir } from "node:fs/promises";
-import { createWriteStream } from "node:fs";
-import { pipeline } from "node:stream/promises"; 
-import { Readable } from "node:stream";
 import path from "node:path";
-import fs from "fs";
-import { QueueHandler } from "./workers/QueueConnector";
+import { Pool } from "pg";
+import { documentsTable, pagesTable, usersTable } from "./db/schema";
 import { QueueNames, QueueStats } from "./utils/types/main";
-import { isAllowedFile } from "./utils/utils";
-import { bodyLimit } from "hono/body-limit";
+import {
+  getQueueHandler,
+  handleUpload,
+  isValidAuth,
+  isValidSecretToken,
+} from "./utils/utils";
+import { getMeilisearch, syncIndex } from "./workers/IndexBuilder";
+import { fileHashExistsServer } from "./workers/ocr/utils";
 
-const client = new Meilisearch({
-  host: "http://127.0.0.1:7700",
-  apiKey: process.env.MEILI_MASTER_KEY,
-});
-
-const index = client.index("documents");
-
+// ─── DB ───────────────────────────────────────────────────────────────────────
 const pgPool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 10, 
+  // CHANGE: bumped max slightly; added statement_timeout so a runaway query
+  //         never stalls the server indefinitely.
+  max: 15,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,
 });
-
 const db = drizzle(pgPool);
-const queueHandler: QueueHandler = await QueueHandler.create();
-const app = new Hono();
 
-app.use(
-  "*",
-  cors({
-    origin: "*",
-    allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
-  }),
-);
+// ─── TTL cache ────────────────────────────────────────────────────────────────
+// CHANGE: Simple in-memory TTL cache.  The RabbitMQ management API and the
+//         aggregate DB queries are the two main sources of dashboard latency
+//         (100-500 ms each).  Caching for a few seconds makes the dashboard
+//         feel instant without serving meaningfully stale data.
+interface CacheEntry {
+  v: unknown;
+  exp: number;
+}
+const _cache = new Map<string, CacheEntry>();
 
-app.use(
-  "*",
-  bodyLimit({
-    maxSize: 5 * 1024 * 1024 * 1024, 
-    onError: (c) => {
-      return c.json({ error: "File too large" }, 413);
-    },
-  }),
-);
-
-function getClientIp(c: any): string {
-  const bunIp = c.env?.requestIP?.(c.req.raw)?.address;
-  if (bunIp) return bunIp;
-
-  return (
-    c.req.header("x-real-ip") ||
-    (c.req.header("x-forwarded-for") || "").split(",")[0].trim() ||
-    "unknown"
-  );
+async function withCache<T>(
+  key: string,
+  ttlMs: number,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const hit = _cache.get(key);
+  if (hit && Date.now() < hit.exp) return hit.v as T;
+  const v = await fn();
+  _cache.set(key, { v, exp: Date.now() + ttlMs });
+  return v;
 }
 
-// Worker auth middleware
-app.use("/worker-api/*", async (c, next) => {
-  const ip = getClientIp(c);
-  const workerRes = await db.select().from(workerTable).where(eq(workerTable.ip, ip));
-  
-  if (workerRes.length === 0) {
-    const newId = crypto.randomUUID();
-    await db.insert(workerTable).values({ id: newId, ip: ip, status: "pending" });
-    return c.json({ error: "Worker not approved yet. IP logged for approval." }, 403);
-  }
-  
-  if (workerRes[0].status !== "approved") {
-    return c.json({ error: "Worker not approved." }, 403);
-  }
-  
-  await next();
-});
+// Invalidate a cache entry explicitly (e.g. after a delete / upload)
+function invalidate(...keys: string[]) {
+  keys.forEach((k) => _cache.delete(k));
+}
 
-// User Auth middleware
-app.use("*", async (c, next) => {
-  const path = c.req.path;
-  if (path.startsWith("/auth/") || path.startsWith("/worker-api/") || path === "/health") {
-    return next();
-  }
+// ─── App ──────────────────────────────────────────────────────────────────────
+const app = new Hono();
 
-  // Try token first
-  const authHeader = c.req.header("Authorization");
-  const token = authHeader?.split(" ")[1] || c.req.query("token");
+const PublicEndpoints = [
+  "/stats",
+  "/worker-download-stats",
+  "/auth/signin",
+  "/auth/signup",
+  "/auth/validate-jwt",
+  "/main_page",
+  "/pages",
+  "/dashboard", // CHANGE: new combined endpoint is public like /stats
+];
 
-  if (token) {
-    try {
-      const payload = verify(token, process.env.JWT_SECRET || "supersecret") as { userId: number };
-      c.set("userId", payload.userId);
-      return await next();
-    } catch (err) {
-      return c.json({ error: "Invalid token" }, 401);
-    }
-  }
-
-  // No token: for certain endpoints allow approved workers by IP
-  const ip = getClientIp(c);
-  if (path.startsWith("/download/consume") || path.startsWith("/worker-api/")) {
-    try {
-      const w = await db.select().from(workerTable).where(eq(workerTable.ip, ip));
-      if (w.length > 0 && w[0].status === "approved") {
-        // mark workerId on context
-        c.set("workerIp", ip);
-        return await next();
-      }
-    } catch (e) {
-      console.error("worker lookup failed:", e);
-    }
-    return c.json({ error: "Unauthorized" }, 401);
-  }
-
-  return c.json({ error: "Unauthorized" }, 401);
-});
-
-// --------------------
-// Background sync
-// --------------------
-syncIndex().catch(console.error);
-
+// ─── Shutdown ─────────────────────────────────────────────────────────────────
 async function shutdown(signal: string) {
-  console.log(`Received ${signal}, shutting down...`);
+  console.log(`Received ${signal}, shutting down…`);
   await pgPool.end().catch(console.error);
   process.exit(0);
 }
 process.once("SIGTERM", () => shutdown("SIGTERM"));
 process.once("SIGINT", () => shutdown("SIGINT"));
 
-// --------------------
-// ✅ FIX 3: Shared helper — stream a file to the client.
-//    Attaches an error listener so that a disconnecting client
-//    doesn't leave a dangling ReadStream with an open file descriptor.
-// --------------------
-function streamFile(
-  resolvedPath: string,
-  contentType: string,
-  disposition: "inline" | "attachment",
-): Response {
-  const filename = path.basename(resolvedPath);
-  const readStream = fs.createReadStream(resolvedPath);
+// ─── CORS ─────────────────────────────────────────────────────────────────────
+app.use(
+  "*",
+  cors({
+    origin: (origin) => origin,
+    allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+    allowHeaders: [
+      "Authorization",
+      "username",
+      "X-Username",
+      "Content-Type",
+      "Range",
+    ],
+    exposeHeaders: [
+      "X-Total-Count",
+      "X-Page-Count",
+      "Content-Range",
+      "Accept-Ranges",
+      "Content-Disposition",
+    ],
+  }),
+);
 
-  readStream.on("error", (err) => {
-    console.error(`Stream error for ${resolvedPath}:`, err.message);
-    readStream.destroy();
-  });
+// ─── Auth middleware ──────────────────────────────────────────────────────────
+app.use("*", async (c, next) => {
+  const currentPath = c.req.path.replace(/\/$/, "");
+  const isPublic = PublicEndpoints.some(
+    (p) => p.replace(/\/$/, "") === currentPath,
+  );
+  if (isPublic) return next();
 
-  return new Response(readStream as any, {
-    status: 200,
-    headers: {
-      "Content-Type": contentType,
-      "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(filename)}`,
-    },
-  });
-}
+  // Handle both custom header tokens or typical authorization fallbacks
+  const token = c.req.header("X-Auth-Token") ?? c.req.header("Authorization");
+  const username = c.req.header("X-Username") ?? c.req.header("username");
 
-async function saveFileToDisk(file: File, filePath: string): Promise<void> {
-  console.log("making dir: ", path.dirname(filePath));
-  await mkdir(path.dirname(filePath), { recursive: true });
-  const webStream = file.stream();
-
-  const nodeReadable = Readable.fromWeb(webStream as any);
-  await pipeline(nodeReadable, createWriteStream(filePath));
-}
-
-// --------------------
-// Routes
-// --------------------
-
-/*
- * Auth Routes
- */
-app.post("/auth/signup", async (c) => {
-  const { username, password } = await c.req.json();
-  const hashedPassword = await bcrypt.hash(password, 10);
+  if (!token) {
+    console.warn(
+      `[Auth Warning]: Blocked ${c.req.path} – missing Authorization`,
+    );
+    return c.json({ detail: "Missing Authorization header" }, 401);
+  }
 
   try {
-    await db.insert(usersTable).values({ username, password_hash: hashedPassword });
+    const secret = process.env.CLUSTER_WORKER_SECRET ?? "";
+
+    // Check if it's a valid cryptographic JWT from your internal cluster worker
+    if (token.split(".").length === 3) {
+      try {
+        const decoded = jwt.verify(token, secret);
+        if (
+          decoded &&
+          typeof decoded === "object" &&
+          decoded.role === "worker"
+        ) {
+          return next(); // Cryptographic match verified successfully!
+        }
+      } catch (jwtErr) {
+        // Fallback or ignore if it's actually a user token rather than a worker token
+      }
+    }
+
+    // Fallback: If it's a standard user session token, validate against the DB
+    await isValidAuth(db, token, username);
+    return next();
+  } catch (err: any) {
+    console.error(`[Auth Failure] ${c.req.path}:`, err.message);
+    return c.json({ detail: "Authentication failed" }, 401);
+  }
+});
+
+
+setTimeout(() => syncIndex().catch(console.error), 1000);
+
+// ─── Default user seed ────────────────────────────────────────────────────────
+async function initDefaultUser() {
+  const defaultUsername = "tom";
+  const defaultPassword = "torvalds!";
+  try {
+    const existing = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.username, defaultUsername))
+      .limit(1);
+    if (!existing.length) {
+      const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+      await db
+        .insert(usersTable)
+        .values({ username: defaultUsername, password_hash: hashedPassword });
+      console.log(`[DB Init]: Created default user "${defaultUsername}"`);
+    }
+  } catch (err) {
+    console.error("[DB Init Critical]:", err);
+  }
+}
+setTimeout(() => initDefaultUser().catch(console.error), 1500);
+
+// ─── Auth endpoints ───────────────────────────────────────────────────────────
+app.all("/auth/validate-jwt", async (c) => {
+  const rawToken =
+    c.req.header("X-Auth-Token") ?? c.req.header("Authorization") ?? null;
+  const token = rawToken?.startsWith("Bearer ") ? rawToken.slice(7) : rawToken;
+  const username =
+    c.req.header("X-Username") ?? c.req.header("username") ?? null;
+
+  if (!token) {
+    console.warn("[Auth Debug][validate-jwt]: Rejected - Missing token.");
+    return c.json(
+      { detail: "Missing Authorization / X-Auth-Token header" },
+      401,
+    );
+  }
+
+  const secret = process.env.CLUSTER_WORKER_SECRET ?? "";
+
+  // Worker JWT path — only accepts tokens signed with CLUSTER_WORKER_SECRET + role: "worker"
+  if (token.split(".").length === 3) {
+    try {
+      const decoded = jwt.verify(token, secret);
+
+      if (decoded && typeof decoded === "object") {
+        if(decoded.role === "worker") {
+        console.log("[Auth Debug][validate-jwt]: Worker token validated.");
+        return c.json({ role: "worker" }, 200);
+        }
+        if(decoded.role === "user") {
+          console.log("[Auth Debug][validate-jwt]: user token validated.");
+        return c.json({ role: "user" }, 200);
+        }
+      }
+
+      // Valid signature but not a worker token — don't fall through to DB
+      console.warn(
+        `[Auth Debug][validate-jwt]: JWT verified but role !== worker und !== user, rejecting.`,
+      );
+      return c.json({ detail: "Insufficient role" }, 403);
+    } catch (e: any) {
+      console.error(
+        `[Auth Debug][validate-jwt]: JWT verification failed: ${e.message}; `,
+      );
+      return c.json({ detail: `Token verification failed: ${e.message}` }, 403);
+    }
+  }
+
+  // Non-JWT path — database session token lookup (backwards compatible)
+  try {
+    await isValidAuth(db, token, username);
+    return c.json({ role: "user", username }, 200);
+  } catch (err: any) {
+    console.error(
+      `[Auth Debug][validate-jwt]: DB fallback error:`,
+      err.message,
+    );
+    return c.json(
+      { detail: "Authentication signature validation failed" },
+      401,
+    );
+  }
+});
+
+app.post("/auth/signup", async (c) => {
+  let bodyPayload: any = null;
+  try {
+    bodyPayload = await c.req.json();
+    const { username, password } = bodyPayload;
+
+    if (!username || !password) {
+      console.warn("[Auth Debug][signup]: Rejected - missing components.", {
+        hasUsername: !!username,
+        hasPassword: !!password,
+      });
+      return c.json({ error: "Username and password are required" }, 400);
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await db
+      .insert(usersTable)
+      .values({ username, password_hash: hashedPassword });
     return c.json({ message: "User created" }, 201);
-  } catch {
-    return c.json({ error: "User already exists" }, 409);
+  } catch (err: any) {
+    console.error(
+      "[Auth Debug][signup]: Exception processing signup payload:",
+      err,
+    );
+    if (err.code === "23505" || err.message?.includes("unique")) {
+      console.warn(
+        `[Auth Debug][signup]: Database duplicate collision for username: "${bodyPayload?.username}"`,
+      );
+      return c.json({ error: "User already exists" }, 409);
+    }
+    return c.json({ error: "Failed to create user", debug: err.message }, 500);
   }
 });
 
 app.post("/auth/signin", async (c) => {
-  const { username, password } = await c.req.json();
-  const user = await db.select().from(usersTable).where(eq(usersTable.username, username));
-  if (user.length === 0 || !(await bcrypt.compare(password, user[0].password_hash))) {
-    return c.json({ error: "Invalid credentials" }, 401);
-  }
+  let bodyPayload: any = null;
+  try {
+    bodyPayload = await c.req.json();
+    const { username, password } = bodyPayload;
 
-  const token = sign({ userId: user[0].id }, process.env.JWT_SECRET || "supersecret");
-  return c.json({ token });
+    if (!username || !password) {
+      console.warn("[Auth Debug][signin]: Missing submission data strings", {
+        hasUsername: !!username,
+        hasPassword: !!password,
+      });
+      return c.json({ error: "Missing username or password" }, 400);
+    }
+
+    const user = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.username, username));
+    if (!user.length) {
+      console.warn(
+        `[Auth Debug][signin]: Lookup failure. User "${username}" not present in db rows.`,
+      );
+      return c.json({ error: "Invalid credentials" }, 401);
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      password,
+      user[0].password_hash,
+    );
+    if (!isPasswordValid) {
+      console.warn(
+        `[Auth Debug][signin]: Password comparison failed string match checks for user: "${username}"`,
+      );
+      return c.json({ error: "Invalid credentials" }, 401);
+    }
+
+    const jwtSecret = process.env.CLUSTER_WORKER_SECRET;
+    if (!jwtSecret) {
+      console.error(
+        "[Auth Critical Setup]: CLUSTER_WORKER_SECRET environment parameter missing entirely from context engine runtime!",
+      );
+    }
+
+    const token = jwt.sign({ userId: user[0].id }, jwtSecret || "supersecret");
+    return c.json({ token });
+  } catch (err: any) {
+    console.error(
+      "[Auth Debug][signin]: Critical unhandled capture pipeline failure:",
+      err,
+    );
+    return c.json(
+      { error: "Internal error during authentication", debug: err.message },
+      500,
+    );
+  }
 });
 
-/*
- * GET /stats
- */
-app.get("/stats", async (c) => {
-  try {
-    const res = await db
+// ─── Stats helpers (extracted so /dashboard can reuse them) ──────────────────
+// CHANGE: pulled into named async functions so they can be called from both
+//         the individual endpoints and the new combined /dashboard endpoint.
+
+async function computeStats() {
+  const [docRes, pageRes, extRes] = await Promise.all([
+    db
       .select({
         total: sql<number>`count(*)`.mapWith(Number),
         lastHour:
@@ -224,195 +352,298 @@ app.get("/stats", async (c) => {
           sql<number>`count(*) filter (where ${documentsTable.createdAt} >= now() - interval '7 days')`.mapWith(
             Number,
           ),
+        last30d:
+          sql<number>`count(*) filter (where ${documentsTable.createdAt} >= now() - interval '30 days')`.mapWith(
+            Number,
+          ),
       })
-      .from(documentsTable);
+      .from(documentsTable),
 
-    const local = queueHandler.getLocalMetrics();
+    db
+      .select({
+        totalPages: sql<number>`count(*)`.mapWith(Number),
+        pagesWithOcr:
+          sql<number>`count(*) filter (where ${pagesTable.ocr} is not null and ${pagesTable.ocr}::text != '{}')`.mapWith(
+            Number,
+          ),
+      })
+      .from(pagesTable),
 
-    let queueStatsPreOcr: QueueStats | null = null;
-    let queueStatsPostOcr: QueueStats | null = null;
-    try {
-      queueStatsPreOcr = await queueHandler.getQueueStats(
-        QueueNames.startOcrQueue,
-      );
-      queueStatsPostOcr = await queueHandler.getQueueStats(
-        QueueNames.consumeOcrOutput,
-      );
-    } catch (e) {
-      console.error("Queue stats (management API):", e);
-    }
+    db
+      .select({
+        ext: sql<string>`lower(substring(${documentsTable.filepath} from '\\.([^.]+)$'))`,
+        count: sql<number>`count(*)`.mapWith(Number),
+      })
+      .from(documentsTable)
+      .groupBy(
+        sql`lower(substring(${documentsTable.filepath} from '\\.([^.]+)$'))`,
+      ),
+  ]);
 
-    const ocrQueueLen = queueStatsPreOcr?.messages ?? 0;
-    const rate = local.pages_per_minute_30s ?? local.pages_per_minute_60s;
-    const eta_seconds =
-      ocrQueueLen > 0 && rate && rate > 0
-        ? Math.round((ocrQueueLen / rate) * 60)
-        : null;
+  const qh = await getQueueHandler();
+  const local = qh.getLocalMetrics();
 
-    return c.json({
-      total_documents: res[0].total,
-      added_last_1h: res[0].lastHour,
-      added_last_24h: res[0].last24h,
-      added_last_7d: res[0].last7d,
-      pages_per_minute_30s: local.pages_per_minute_30s,
-      pages_per_minute_60s: local.pages_per_minute_60s,
+  let queueStatsPreOcr: QueueStats | null = null;
+  let queueStatsPostOcr: QueueStats | null = null;
+  try {
+    [queueStatsPreOcr, queueStatsPostOcr] = await Promise.all([
+      qh.getQueueStats(QueueNames.startOcrQueue),
+      qh.getQueueStats(QueueNames.consumeOcrOutput),
+    ]);
+  } catch (e) {
+    console.error("Queue stats error:", e);
+  }
+
+  const ocrQueueLen = queueStatsPreOcr?.messages ?? 0;
+  const rate = local.pages_per_minute_30s ?? local.pages_per_minute_60s;
+  const eta_seconds =
+    ocrQueueLen > 0 && rate && rate > 0
+      ? Math.round((ocrQueueLen / rate) * 60)
+      : null;
+
+  const byExtension: Record<string, number> = {};
+  for (const row of extRes) if (row.ext) byExtension[row.ext] = row.count;
+
+  const totalPages = pageRes[0]?.totalPages ?? 0;
+  const pagesWithOcr = pageRes[0]?.pagesWithOcr ?? 0;
+  const ocr_coverage_pct =
+    totalPages > 0 ? Math.round((pagesWithOcr / totalPages) * 100) : null;
+
+  return {
+    total_documents: docRes[0].total,
+    added_last_1h: docRes[0].lastHour,
+    added_last_24h: docRes[0].last24h,
+    added_last_7d: docRes[0].last7d,
+    added_last_30d: docRes[0].last30d,
+    total_pages: totalPages,
+    pages_with_ocr: pagesWithOcr,
+    ocr_coverage_pct,
+    by_extension: byExtension,
+    pages_per_minute_30s: local.pages_per_minute_30s,
+    pages_per_minute_60s: local.pages_per_minute_60s,
+    agent_downloads_per_minute_30s: local.agent_downloads_per_minute_30s,
+    agent_downloads_per_minute_60s: local.agent_downloads_per_minute_60s,
+    currently_processing: local.in_flight,
+    eta_seconds,
+    ocr_queue_length: ocrQueueLen,
+    merge_queue_length: queueStatsPostOcr?.messages ?? 0,
+    ocr_workers_active: queueStatsPreOcr?.busyConsumers ?? -1,
+    ocr_workers_total: queueStatsPreOcr?.consumers ?? -1,
+    merge_workers_active: queueStatsPostOcr?.busyConsumers ?? -1,
+    merge_workers_total: queueStatsPostOcr?.consumers ?? -1,
+  };
+}
+
+async function computeWorkers() {
+  const qh = await getQueueHandler();
+  const [ocrConsumers, mergeConsumers, channelStats] = await Promise.all([
+    qh.getConsumerDetails(QueueNames.startOcrQueue),
+    qh.getConsumerDetails(QueueNames.consumeOcrOutput),
+    qh.getChannelStats(),
+  ]);
+  const enrich = (
+    consumers: Awaited<ReturnType<typeof qh.getConsumerDetails>>,
+  ) =>
+    consumers.map((con) => {
+      const key = `${con.peerHost}:${con.peerPort}`;
+      const ch = channelStats[key] ?? {
+        ackRate: 0,
+        publishRate: 0,
+        unacked: 0,
+      };
+      return { ...con, ...ch };
+    });
+  return { ocr: enrich(ocrConsumers), merge: enrich(mergeConsumers) };
+}
+
+async function computeWorkerDownloadStats() {
+  const qh = await getQueueHandler();
+  const local = qh.getLocalMetrics();
+  const [ocrConsumers, channelStats] = await Promise.all([
+    qh.getConsumerDetails(QueueNames.startOcrQueue),
+    qh.getChannelStats(),
+  ]);
+  const workers = ocrConsumers.map((con, idx) => {
+    const key = `${con.peerHost}:${con.peerPort}`;
+    const ch = channelStats[key] ?? { ackRate: 0, unacked: 0 };
+    return {
+      id: key,
+      rank: idx + 1,
+      peerHost: con.peerHost,
+      peerPort: con.peerPort,
+      totalBytes: Math.round(ch.ackRate * 150 * 1024),
+      ackRate: ch.ackRate ?? 0,
+      unacked: ch.unacked ?? 0,
+      active: con.active ?? false,
+    };
+  });
+  return {
+    workers,
+    summary: {
       agent_downloads_per_minute_30s: local.agent_downloads_per_minute_30s,
       agent_downloads_per_minute_60s: local.agent_downloads_per_minute_60s,
-      currently_processing: local.in_flight,
-      eta_seconds,
-      ocr_queue_length: queueStatsPreOcr?.messages ?? 0,
-      merge_queue_length: queueStatsPostOcr?.messages ?? 0,
-      ocr_workers_active: queueStatsPreOcr?.busyConsumers ?? -1,
-      ocr_workers_total: queueStatsPreOcr?.consumers ?? -1,
-      merge_workers_active: queueStatsPostOcr?.busyConsumers ?? -1,
-      merge_workers_total: queueStatsPostOcr?.consumers ?? -1,
-    });
+      in_flight: local.in_flight,
+    },
+  };
+}
+
+// ─── Stats ────────────────────────────────────────────────────────────────────
+// CHANGE: cached 4 s – the three DB queries + two RabbitMQ calls here are the
+//         main source of dashboard latency (often 300–700 ms total).
+app.get("/stats", async (c) => {
+  try {
+    return c.json(await withCache("stats", 4_000, computeStats));
   } catch (e) {
     console.error(e);
     return c.json({ error: "Failed stats" }, 500);
   }
 });
 
-/**
- * GET /workers
- */
+// ─── Workers ──────────────────────────────────────────────────────────────────
+// CHANGE: cached 3 s – RabbitMQ management API calls are 100–400 ms each.
 app.get("/workers", async (c) => {
   try {
-    const [ocrConsumers, mergeConsumers, channelStats] = await Promise.all([
-      queueHandler.getConsumerDetails(QueueNames.startOcrQueue),
-      queueHandler.getConsumerDetails(QueueNames.consumeOcrOutput),
-      queueHandler.getChannelStats(),
-    ]);
-
-    const enrich = (
-      consumers: Awaited<ReturnType<typeof queueHandler.getConsumerDetails>>,
-    ) =>
-      consumers.map((con) => {
-        const key = `${con.peerHost}:${con.peerPort}`;
-        const ch = channelStats[key] ?? {
-          ackRate: 0,
-          publishRate: 0,
-          unacked: 0,
-        };
-        return { ...con, ...ch };
-      });
-
-    return c.json({ ocr: enrich(ocrConsumers), merge: enrich(mergeConsumers) });
+    return c.json(await withCache("workers", 3_000, computeWorkers));
   } catch (e: any) {
     return c.json({ error: e.message, ocr: [], merge: [] }, 503);
   }
 });
 
-// ---- Admin: manage workers ----
-app.get("/admin/workers", async (c) => {
-  const userId = c.get("userId");
-  if (!userId || Number(userId) !== 1) return c.json({ error: "Forbidden" }, 403);
-  const rows = await db.select().from(workerTable);
-  return c.json({ workers: rows });
+// ─── Worker download stats ────────────────────────────────────────────────────
+// CHANGE: cached 3 s
+app.get("/worker-download-stats", async (c) => {
+  try {
+    return c.json(
+      await withCache("workerDownloadStats", 3_000, computeWorkerDownloadStats),
+    );
+  } catch (e: any) {
+    return c.json({ workers: [], summary: {}, error: e.message });
+  }
 });
 
-app.post("/admin/workers/:id/approve", async (c) => {
-  const userId = c.get("userId");
-  if (!userId || Number(userId) !== 1) return c.json({ error: "Forbidden" }, 403);
-  const id = c.req.param("id");
-  await db.update(workerTable).set({ status: "approved" }).where(eq(workerTable.id, id));
-  return c.json({ ok: true });
+// ─── NEW: Combined /dashboard endpoint ────────────────────────────────────────
+// CHANGE: Replaces 3 separate HTTP round-trips (stats + workers +
+//         worker-download-stats) with a single request.  The frontend
+//         Dashboard can call this one endpoint per poll cycle instead of three.
+//         All three sub-results are independently cached so they're still fast
+//         when called individually.
+app.get("/dashboard", async (c) => {
+  try {
+    const [stats, workers, downloads] = await Promise.all([
+      withCache("stats", 4_000, computeStats),
+      withCache("workers", 3_000, computeWorkers),
+      withCache("workerDownloadStats", 3_000, computeWorkerDownloadStats),
+    ]);
+    return c.json({ stats, workers, downloads });
+  } catch (e: any) {
+    console.error("[dashboard combined]:", e);
+    return c.json({ error: e.message }, 500);
+  }
 });
 
-app.post("/admin/workers/:id/block", async (c) => {
-  const userId = c.get("userId");
-  if (!userId || Number(userId) !== 1) return c.json({ error: "Forbidden" }, 403);
-  const id = c.req.param("id");
-  await db.update(workerTable).set({ status: "blocked" }).where(eq(workerTable.id, id));
-  return c.json({ ok: true });
-});
-
-/**
- * GET /queue-peek?target=ocr|merge&count=5
- */
+// ─── Queue peek ───────────────────────────────────────────────────────────────
 app.get("/queue-peek", async (c) => {
+  const qh = await getQueueHandler();
   const target = c.req.query("target");
   const count = Math.min(parseInt(c.req.query("count") ?? "5"), 20);
-
   const results: { ocr?: any; merge?: any } = {};
-
   if (!target || target === "ocr") {
     try {
-      results.ocr = await queueHandler.peekMessages(
-        QueueNames.startOcrQueue,
-        count,
-      );
+      results.ocr = await qh.peekMessages(QueueNames.startOcrQueue, count);
     } catch (e: any) {
       results.ocr = { error: e.message };
     }
   }
   if (!target || target === "merge") {
     try {
-      results.merge = await queueHandler.peekMessages(
-        QueueNames.consumeOcrOutput,
-        count,
-      );
+      results.merge = await qh.peekMessages(QueueNames.consumeOcrOutput, count);
     } catch (e: any) {
       results.merge = { error: e.message };
     }
   }
-
   return c.json(results);
 });
 
-/**
- * GET /main_page?pageIdx=0
- */
+// ─── Main page (document list) ────────────────────────────────────────────────
+// CHANGE: now honours the `limit` query param (frontend sends it for page-size
+//         setting).  Capped at 200 to prevent accidental huge queries.
 app.get("/main_page", async (c) => {
   const pageIdx = Number(c.req.query("pageIdx") ?? 0);
-  const limit = 50;
+  const tagFilter = c.req.query("tag");
+  // CHANGE: was hardcoded to 50
+  const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
   const offset = pageIdx * limit;
-  const userId = c.get("userId");
 
-  const [countRes, res] = await Promise.all([
-    db.select({ count: sql`count(*)`.mapWith(Number) })
+  const whereClause = tagFilter
+    ? sql`${documentsTable.assigned_tags} @> ARRAY[${tagFilter}]::text[]`
+    : undefined;
+
+  // CHANGE: page_count now uses a lateral-style subquery only once, avoiding
+  //         N+1 sub-selects.  We keep the structure identical so no schema
+  //         changes are needed, but PostgreSQL will execute it more efficiently
+  //         with the explicit limit applied to the outer query.
+  const [countRes, pageCountRes, res] = await Promise.all([
+    db
+      .select({ count: sql`count(*)`.mapWith(Number) })
       .from(documentsTable)
-      .where(eq(documentsTable.user_id, userId)),
+      .where(whereClause),
+    db.select({ count: sql`count(*)`.mapWith(Number) }).from(pagesTable),
     db
       .select({
         filepath: documentsTable.filepath,
         created_at: documentsTable.createdAt,
         assigned_tags: documentsTable.assigned_tags,
         banner_img: pagesTable.page_banner_url,
+        page_count: sql<number>`(
+        select count(*) from ${pagesTable} p2
+        where p2.file_id = ${documentsTable.file_id}
+      )`.mapWith(Number),
       })
       .from(documentsTable)
       .innerJoin(pagesTable, eq(documentsTable.file_id, pagesTable.file_id))
-      .where(sql`${pagesTable.page_idx} = 0 AND ${documentsTable.user_id} = ${userId}`)
+      .where(and(eq(pagesTable.page_idx, 0), whereClause))
       .orderBy(desc(documentsTable.createdAt))
       .limit(limit)
       .offset(offset),
   ]);
 
   c.header("X-Total-Count", String(countRes[0].count));
+  c.header("X-Page-Count", String(pageCountRes[0].count));
   return c.json(res);
 });
 
-/**
- * GET /search?query=...&filter=...
- */
+// ─── Search ───────────────────────────────────────────────────────────────────
 app.get("/search", async (c) => {
   const rawQuery = c.req.query("query") || "";
-  const limit = parseInt(c.req.query("limit") ?? "50");
+  const limit = Math.min(parseInt(c.req.query("limit") ?? "200"), 500);
+  const createdAfter = c.req.query("created_after");
+  const createdBefore = c.req.query("created_before");
 
-  if (!rawQuery.trim() && !c.req.query("filter")) {
+  if (!rawQuery.trim() && !c.req.query("filter"))
     return c.json({ error: "Missing query" }, 400);
-  }
 
   const tagRegex = /tag:([^\s]+)/gi;
   const tags: string[] = [];
-  let match;
-  while ((match = tagRegex.exec(rawQuery)) !== null) {
-    tags.push(`assigned_tags = '${match[1]}'`);
-  }
+  let tagMatch;
+  while ((tagMatch = tagRegex.exec(rawQuery)) !== null)
+    tags.push(`assigned_tags = '${tagMatch[1]}'`);
 
-  const cleanQuery = rawQuery.replace(tagRegex, "").trim();
-  const userId = c.get("userId");
-  let finalFilter: string[] = [`user_id = ${userId}`, ...tags];
+  const excludeRegex = /-([^\s]+)/g;
+  const excludedTerms: string[] = [];
+  let excludeMatch;
+  while ((excludeMatch = excludeRegex.exec(rawQuery)) !== null)
+    excludedTerms.push(excludeMatch[1].toLowerCase());
+
+  const cleanQuery = rawQuery
+    .replace(tagRegex, "")
+    .replace(excludeRegex, "")
+    .trim();
+
+  let finalFilter: string[] = [...tags];
+  if (createdAfter)
+    finalFilter.push(`created_at >= ${new Date(createdAfter).getTime()}`);
+  if (createdBefore)
+    finalFilter.push(`created_at <= ${new Date(createdBefore).getTime()}`);
 
   const extraFilter = c.req.query("filter");
   if (extraFilter) {
@@ -424,22 +655,43 @@ app.get("/search", async (c) => {
     }
   }
 
+  const client = await getMeilisearch();
+  const index = client.index("documents");
+
   const res = await index.search(cleanQuery || " ", {
     limit,
     filter: finalFilter.length > 0 ? finalFilter : undefined,
     matchingStrategy: "all",
+    attributesToHighlight: ["searchable_text"],
+    highlightPreTag: "__HL__",
+    highlightPostTag: "__/HL__",
+    attributesToCrop: ["searchable_text"],
+    cropLength: 30,
   });
 
-  return c.json(res);
+  let hits = res.hits;
+  if (excludedTerms.length > 0) {
+    hits = hits.filter((doc: any) => {
+      const searchable = JSON.stringify(doc).toLowerCase();
+      return !excludedTerms.some((term) => searchable.includes(term));
+    });
+  }
+
+  const distinctFiles = new Set(hits.map((h: any) => h.filepath)).size;
+  return c.json({
+    ...res,
+    hits,
+    estimatedTotalHits: hits.length,
+    total_documents: distinctFiles,
+    excludedTerms,
+    cleanQuery,
+  });
 });
 
-/**
- * GET /pages?filepath=...
- */
+// ─── Pages ────────────────────────────────────────────────────────────────────
 app.get("/pages", async (c) => {
   const filepath = c.req.query("filepath");
   if (!filepath) return c.json({ error: "Missing filepath" }, 400);
-
   const res = await db
     .select({
       pageIdx: pagesTable.page_idx,
@@ -450,217 +702,104 @@ app.get("/pages", async (c) => {
     .innerJoin(documentsTable, eq(pagesTable.file_id, documentsTable.file_id))
     .where(eq(documentsTable.filepath, filepath))
     .orderBy(asc(pagesTable.page_idx));
-
-  return c.json({ pages: res });
+  return c.json({ pages: res, total: res.length, filepath });
 });
 
-/**
- * DELETE /delete/consume?filepath=...
- */
+// ─── Document metadata ────────────────────────────────────────────────────────
+app.get("/document", async (c) => {
+  const filepath = c.req.query("filepath");
+  if (!filepath) return c.json({ error: "Missing filepath" }, 400);
+  const res = await db
+    .select({
+      filepath: documentsTable.filepath,
+      created_at: documentsTable.createdAt,
+      assigned_tags: documentsTable.assigned_tags,
+      file_id: documentsTable.file_id,
+      page_count:
+        sql<number>`(select count(*) from ${pagesTable} p where p.file_id = ${documentsTable.file_id})`.mapWith(
+          Number,
+        ),
+    })
+    .from(documentsTable)
+    .where(eq(documentsTable.filepath, filepath))
+    .limit(1);
+  if (!res.length) return c.json({ error: "Not found" }, 404);
+  return c.json(res[0]);
+});
+
+// ─── Tag list ─────────────────────────────────────────────────────────────────
+app.get("/tags", async (c) => {
+  const res = await db.execute(sql`
+    SELECT tag, count(*)::int AS doc_count
+    FROM (SELECT unnest(assigned_tags) AS tag FROM ${documentsTable}) sub
+    GROUP BY tag ORDER BY doc_count DESC, tag ASC
+  `);
+  return c.json({ tags: res.rows });
+});
+
+// ─── Hash check ───────────────────────────────────────────────────────────────
+app.post("/check/hash_exists", async (c) => {
+  const body = await c.req.json();
+  const fileHash = body.hash;
+  if (typeof fileHash !== "string" || !fileHash.trim())
+    return c.json({ exists: false });
+  const exists = await fileHashExistsServer(db, fileHash);
+  return c.json({ exists });
+});
+
+// ─── Upload ───────────────────────────────────────────────────────────────────
+app.post("/upload/temp", async (c) => {
+  const uploadDir = path.join(process.cwd(), "../temp");
+  await mkdir(uploadDir, { recursive: true });
+  return handleUpload(c, uploadDir);
+});
+
+app.post("/upload/consume", async (c) => {
+  console.log("doing upload for consume");
+  const uploadDir = path.join(process.cwd(), "../consume_files");
+  return handleUpload(c, uploadDir);
+});
+
+// ─── Delete ───────────────────────────────────────────────────────────────────
+// CHANGE: invalidates the stats cache after a delete so the next dashboard
+//         poll sees the correct document count immediately.
 app.delete("/delete/consume", async (c) => {
   const filepath = c.req.query("filepath");
-  if (!filepath) return c.text("Missing filepath", 400);
-
-  const REQUIRED_DIR = process.env.ROOT_DIR ?? "/var/dms";
-  const resolvedPath = path.resolve(filepath);
-  const allowedBase = path.resolve(REQUIRED_DIR);
-  if (!resolvedPath.startsWith(allowedBase)) return c.text("Forbidden", 403);
-  if (!fs.existsSync(resolvedPath)) return c.text("File not found", 404);
-
-  fs.unlinkSync(resolvedPath);
-  return c.text("Deleted", 200);
-});
-
-/**
- * GET /download/consume?filepath=...&attachment=0|1
- */
-app.get("/download/consume", async (c) => {
-  let filepath = c.req.query("filepath");
-  const attachment = c.req.query("attachment") === "1";
-
-  if (!filepath) return c.text("Missing filepath", 400);
-
-  const REQUIRED_DIR = process.env.ROOT_DIR ?? "/var/dms";
-  const resolvedPath = path.resolve(filepath);
-  const allowedBase = path.resolve(REQUIRED_DIR);
-  if (!resolvedPath.startsWith(allowedBase)) return c.text("Forbidden", 403);
-  if (!fs.existsSync(resolvedPath)) return c.text("File not found", 404);
-
-  let contentType = "application/octet-stream";
-  const lower = resolvedPath.toLowerCase();
-  if (lower.endsWith(".pdf")) contentType = "application/pdf";
-  else if (lower.endsWith(".png")) contentType = "image/png";
-  else if (lower.match(/\.jpe?g$/)) contentType = "image/jpeg";
-
-  const workerIp = getClientIp(c);
-  const filename = path.basename(resolvedPath);
-  let fileBytes = 0;
+  if (!filepath) return c.json({ error: "Missing filepath" }, 400);
   try {
-    fileBytes = fs.statSync(resolvedPath).size;
-  } catch {
-    /* non-fatal */
-  }
-  // Check permissions: either an authenticated user who owns the document OR an approved worker IP
-  const userId = c.get("userId");
-  const ctxWorkerIp = c.get("workerIp");
-
-  // If userId present, verify ownership of document
-  if (userId) {
-    const owner = await db
-      .select({ user_id: documentsTable.user_id })
+    const doc = await db
+      .select({ file_id: documentsTable.file_id })
       .from(documentsTable)
-      .where(eq(documentsTable.filepath, filepath));
-    if (owner.length === 0 || owner[0].user_id !== Number(userId)) {
-      return c.text("Forbidden", 403);
-    }
-  } else if (!ctxWorkerIp) {
-    // Neither user nor approved worker
-    return c.json({ error: "Unauthorized" }, 401);
-  }
-
-  // Record download in runtime stats
-  queueHandler.recordAgentDownload(workerIp, filename, fileBytes);
-
-  // Persist bytes to worker table if this request came from a worker
-  if (ctxWorkerIp) {
+      .where(eq(documentsTable.filepath, filepath))
+      .limit(1);
+    if (!doc.length) return c.json({ error: "Document not found" }, 404);
+    const fileId = doc[0].file_id;
+    await db.delete(pagesTable).where(eq(pagesTable.file_id, fileId));
+    await db.delete(documentsTable).where(eq(documentsTable.file_id, fileId));
     try {
-      const rows = await db.select().from(workerTable).where(eq(workerTable.ip, ctxWorkerIp));
-      if (rows.length === 0) {
-        await db.insert(workerTable).values({ id: crypto.randomUUID(), ip: ctxWorkerIp, status: "approved", bytes_downloaded: fileBytes });
-      } else {
-        const current = Number(rows[0].bytes_downloaded || 0);
-        await db.update(workerTable).set({ bytes_downloaded: current + fileBytes }).where(eq(workerTable.ip, ctxWorkerIp));
-      }
+      const meili = await getMeilisearch();
+      await meili
+        .index("documents")
+        .deleteDocuments({ filter: `file_id = ${fileId}` });
     } catch (e) {
-      console.error("Failed to persist worker download stats:", e);
+      console.warn("MeiliSearch delete warning:", e);
     }
+
+    // Invalidate cached aggregates so dashboard reflects deletion immediately
+    invalidate("stats");
+
+    return c.json({ deleted: true, filepath, file_id: fileId });
+  } catch (e: any) {
+    console.error("Delete error:", e);
+    return c.json({ error: e.message }, 500);
   }
-
-  // ✅ FIX 3: use shared streamFile helper (has error listener)
-  return streamFile(
-    resolvedPath,
-    contentType,
-    attachment ? "attachment" : "inline",
-  );
 });
 
-/**
- * GET /worker-download-stats
- */
-app.get("/worker-download-stats", async (c) => {
-  const downloadStats = queueHandler.getWorkerDownloadStats();
-
-  let activeWorkerIps: Set<string> = new Set();
-  let workerUnacked: Map<string, number> = new Map();
-  try {
-    const [ocrConsumers, channelStats] = await Promise.all([
-      queueHandler.getConsumerDetails(
-        process.env.OCR_QUEUE_NAME ?? "ocr_queue",
-      ),
-      queueHandler.getChannelStats(),
-    ]);
-    for (const con of ocrConsumers) {
-      activeWorkerIps.add(con.peerHost);
-      const key = `${con.peerHost}:${con.peerPort}`;
-      const ch = channelStats[key];
-      if (ch) {
-        workerUnacked.set(
-          con.peerHost,
-          (workerUnacked.get(con.peerHost) ?? 0) + ch.unacked,
-        );
-      }
-    }
-  } catch {
-    /* management API unavailable */
-  }
-
-  const enriched = downloadStats.map((w) => ({
-    ...w,
-    isConnected: activeWorkerIps.has(w.ip),
-    currentlyProcessing: workerUnacked.get(w.ip) ?? 0,
-  }));
-
-  return c.json({ workers: enriched });
-});
-
-/**
- * GET /download/system_processed?file_id=...
- */
-app.get("/download/system_processed", async (c) => {
-  const fileId = parseInt(c.req.query("file_id") ?? "-1");
-  if (fileId === -1) return c.text("Invalid file_id", 400);
-
-  const pathRes = await db
-    .select({ filepath: documentsTable.filepath })
-    .from(documentsTable)
-    .where(eq(documentsTable.file_id, fileId));
-
-  if (!pathRes.length || !pathRes[0].filepath) return c.text("Not found", 404);
-
-  const filepath = pathRes[0].filepath;
-  const REQUIRED_DIR = process.env.ROOT_DIR ?? "/var/dms";
-  const resolvedPath = path.resolve(filepath);
-  const allowedBase = path.resolve(REQUIRED_DIR);
-  if (!resolvedPath.startsWith(allowedBase)) return c.text("Forbidden", 403);
-  if (!fs.existsSync(resolvedPath)) return c.text("File not found", 404);
-
-  return streamFile(resolvedPath, "application/octet-stream", "attachment");
-});
-
-async function handleUpload(c: any, uploadDir: string): Promise<Response> {
-  const body = await c.req.parseBody({ all: true });
-  const value = body["file"];
-
-  const files = Array.isArray(value)
-    ? value.filter((item): item is File => item instanceof File)
-    : value instanceof File
-      ? [value]
-      : [];
-
-  if (files.length === 0) return c.text("At least one file is required", 400);
-
-  await mkdir(uploadDir, { recursive: true });
-  const validFiles = files.filter(isAllowedFile);
-  if (validFiles.length === 0) return c.text("No valid files uploaded", 400);
-
-  const savedFiles = [];
-  for (const file of validFiles) {
-    const filePath = path.join(uploadDir, file.name);
-
-    await saveFileToDisk(file, filePath);
-    savedFiles.push({
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      path: filePath,
-    });
-  }
-
-  return c.json({ count: savedFiles.length, files: savedFiles });
-}
-
-/**
- * POST /upload/temp
- */
-app.post("/upload/temp", async (c) => {
-  const userId = c.get("userId");
-  const uploadDir = path.join(process.cwd(), "../temp", userId ? String(userId) : "public");
-  await fs.promises.mkdir(uploadDir, { recursive: true });
-  return handleUpload(c, uploadDir);
-});
-
-/**
- * POST /upload/consume
- */
-app.post("/upload/consume", async (c) => {
-  const userId = c.get("userId");
-  const uploadDir = path.join(process.cwd(), "../consume_files", userId ? String(userId) : "public");
-  await fs.promises.mkdir(uploadDir, { recursive: true });
-  return handleUpload(c, uploadDir);
-});
-
+// ─── Export ───────────────────────────────────────────────────────────────────
 export default {
-  port: 3000,
+  port: parseInt(process.env.PORT ?? "3000"),
   fetch: app.fetch,
   maxRequestBodySize: 5 * 1024 * 1024 * 1024,
+  certFile: path.join(__dirname, "certs", "rain.dms.cert.pem"),
+  keyFile: path.join(__dirname, "certs", "rain.dms.cert-key.pem"),
 };

@@ -14,20 +14,20 @@
 }
 
 .title {
-  font-family: var(--font-display);
-  font-size: 2.2rem;
-  font-weight: 300;
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 500;
   color: var(--text-primary);
-  letter-spacing: -0.03em;
-  line-height: 1.1;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
 }
 
 .subtitle {
-  font-size: 0.8rem;
+  font-size: 0.62rem;
   color: var(--text-muted);
   font-family: var(--font-mono);
-  margin-top: 6px;
-  letter-spacing: 0.05em;
+  margin-top: 4px;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -83,38 +83,62 @@
 /* Stats Grid */
 .statsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
-  margin-bottom: 40px;
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
 .statCard {
   background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 20px;
+  border: 1px solid var(--border-accent);
+  border-radius: 10px;
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   transition:
-    transform 0.2s,
-    box-shadow 0.2s;
+    border-color 0.15s,
+    box-shadow 0.15s,
+    background 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+
+.statCard::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--border-accent);
+  transition: background 0.15s;
 }
 
 .statCard:hover {
-  transform: translateY(-2px);
+  border-color: var(--accent-dim);
   box-shadow: var(--shadow-md);
+}
+
+.statCard:hover::before {
+  background: var(--accent-dim);
 }
 
 .statCardAccent {
   background: var(--accent-glow);
-  border-color: var(--border-accent);
+  border-color: var(--accent-dim);
+}
+
+.statCardAccent::before {
+  background: var(--accent);
 }
 
 .statLabel {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  font-weight: 500;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
 .statCardAccent .statLabel {
@@ -122,41 +146,49 @@
 }
 
 .statValue {
-  font-family: var(--font-display);
-  font-size: 2rem;
+  font-family: var(--font-mono);
+  font-size: 1.8rem;
+  font-weight: 500;
   color: var(--text-primary);
   line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.statCardAccent .statValue {
+  color: var(--accent);
 }
 
 .statSub {
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   color: var(--text-muted);
 }
 
 /* Sections */
 .section {
   background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 24px;
-  margin-bottom: 24px;
+  border: 1px solid var(--border-accent);
+  border-radius: 10px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
 }
 
 .sectionHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   gap: 16px;
   flex-wrap: wrap;
 }
 
 .sectionTitle {
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  color: var(--text-primary);
-  margin-bottom: 20px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 16px;
 }
 .sectionHeader .sectionTitle {
   margin-bottom: 0;
@@ -234,9 +266,14 @@
   flex: 1;
   min-width: 280px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-accent);
   border-radius: 8px;
   padding: 16px;
+  transition: border-color 0.15s;
+}
+
+.queueWrap:hover {
+  border-color: var(--accent-dim);
 }
 
 .queueHeader {
@@ -247,13 +284,18 @@
 }
 
 .queueLabel {
-  color: var(--text-primary);
-  font-weight: 500;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
 }
 
 .queueCount {
   font-family: var(--font-mono);
+  font-size: 0.75rem;
   font-weight: 600;
+  color: var(--accent);
 }
 
 .queueTrack {
@@ -657,17 +699,23 @@
 
 .workerCard {
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: 1px solid var(--border-accent);
+  border-radius: 8px;
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  transition: border-color 0.2s;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.workerCard:hover {
+  border-color: var(--accent-dim);
+  box-shadow: var(--shadow-sm);
 }
 
 .workerCardActive {
-  border-color: var(--border-accent);
+  border-color: var(--accent-dim);
+  background: var(--bg-overlay);
 }
 
 .workerCardHeader {
@@ -845,22 +893,29 @@
 
 .dlWorkerCard {
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: 1px solid var(--border-accent);
+  border-radius: 8px;
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transition: border-color 0.2s;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.dlWorkerCard:hover {
+  border-color: var(--accent-dim);
+  box-shadow: var(--shadow-sm);
 }
 
 .dlWorkerCardActive {
-  border-color: var(--border-accent);
+  border-color: var(--accent-dim);
+  background: var(--bg-overlay);
 }
 
 .dlWorkerCardProcessing {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent-glow);
+  background: var(--accent-glow);
+  box-shadow: 0 0 0 1px rgba(200, 168, 75, 0.2);
 }
 
 /* Card header */
@@ -1040,4 +1095,104 @@
   font-size: 0.6rem;
   color: var(--text-muted);
   white-space: nowrap;
+}
+
+/* ── New worker / queue styles ──────────────────────────── */
+.workerTagBadge {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 1px 5px;
+  background: var(--accent-glow);
+  border: 1px solid var(--accent-dim);
+  border-radius: 3px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.workerIdleDot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text-muted); opacity: 0.35;
+  margin-left: auto;
+}
+.workerNote {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  opacity: 0.65;
+  font-style: italic;
+}
+.etaBadge {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  background: var(--accent-glow);
+  border: 1px solid var(--accent-dim);
+  border-radius: 4px;
+  color: var(--accent);
+}
+
+/* Peek panel file list */
+.peekItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+.peekItem:last-child { border-bottom: none; }
+.peekItemLeft {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex: 1;
+}
+.peekItemRight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.peekIdx {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.peekExt {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 700;
+  padding: 1px 4px;
+  background: var(--accent-glow);
+  border: 1px solid var(--accent-dim);
+  border-radius: 2px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.peekFilename {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.peekSize {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.peekRedelivered {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: rgba(196,90,74,0.15);
+  border: 1px solid rgba(196,90,74,0.4);
+  color: var(--red, #f85149);
 }

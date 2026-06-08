@@ -1,144 +1,131 @@
-import "./ocr/pdfjs-polyfill";
-
-import { QueueHandler } from "./QueueConnector";
-import {
-  ImportantDirs,
-  OcrModel,
-  OcrResult,
-  QueueNames,
-} from "../utils/types/main";
+import { QueueHandler, PermanentFailureError } from "./QueueConnector";
+import { OcrModel, OcrResult, QueueNames } from "../utils/types/main";
 import { PaddleJsOcr } from "./ocr/Paddle";
 import { TesseractOcr } from "./ocr/Tesseract";
-import fs from "fs";
+import { promises as fs } from "fs";
 import "dotenv/config";
 import {
-  downloadFile,
-  formatFilename,
+  downloadFileS3,
   getExtension,
   getFilename,
-  sanitizeFilePath,
+  getS3Client,
 } from "./ocr/utils";
-import { fileURLToPath } from "url";
 import path from "path";
+import pLimit from "p-limit";
+
 export class FileProcessor {
-  private PaddleOcrObj: PaddleJsOcr | null = null;
-  private TesseractOcrObj: TesseractOcr | null = null;
-  private queue: QueueHandler | null = null;
-  private tempFolder: string | null = null;
+  private paddle!: PaddleJsOcr;
+  private tesseract!: TesseractOcr;
+  private queue!: QueueHandler;
+  private tempFolder!: string;
+  private ready = false;
 
-  constructor() {}
+  private readonly s3 = getS3Client();
+  private readonly docLimit = pLimit(1);
 
-  async init(lang: string = "en", tempFolder: string) {
+  async init(tempFolder: string): Promise<void> {
     this.tempFolder = tempFolder;
-    this.queue = await QueueHandler.create(process.env.AMQP_URL);
-    this.PaddleOcrObj = await new PaddleJsOcr(lang, tempFolder).init();
-    this.TesseractOcrObj = await new TesseractOcr(1, "eng").init();
+    await fs.mkdir(tempFolder, { recursive: true });
 
-    this.queue.addQueueOnReceive(
-      QueueNames.startOcrQueue,
-      async (filepath: string) => {
-        await this.processDocument(filepath, OcrModel.Paddle);
-      },
+    this.queue = await QueueHandler.create(process.env.AMQP_URL);
+
+    this.paddle = new PaddleJsOcr(tempFolder);
+    this.tesseract = new TesseractOcr(1, "eng");
+
+    // Warmup BEFORE registering as a queue consumer.
+    console.log("[Processor] Warming up Paddle OCR worker...");
+    await this.paddle.warmup();
+    console.log("[Processor] Paddle OCR worker ready.");
+
+    this.ready = true;
+
+    // Register the consumer only after warmup so the broker never sends
+    // a message to an unready processor.
+    this.queue.addQueueOnReceive(QueueNames.startOcrQueue, (s3Url: string) =>
+      this.processDocument(s3Url),
     );
   }
 
   async processDocument(
-    filepath: string,
-    model: OcrModel = OcrModel.Tesseract,
-    queueName: QueueNames = QueueNames.consumeOcrOutput,
-  ) {
+    s3Url: string,
+    model: OcrModel = OcrModel.Paddle,
+  ): Promise<void> {
+    return this.docLimit(() => this._processDocument(s3Url, model));
+  }
+
+  private async _processDocument(
+    s3Url: string,
+    model: OcrModel,
+  ): Promise<void> {
+    this.assertReady();
+
+    // Robust filename extraction — handles percent-encoded characters and any
+    // query-string or fragment that might be appended to the URL.
+    let filename: string;
+    try {
+      const urlPath = new URL(s3Url).pathname;
+      filename = path.basename(decodeURIComponent(urlPath));
+    } catch {
+      // Fallback for non-standard URL strings (shouldn't happen in practice).
+      filename = `${getFilename(s3Url)}.${getExtension(s3Url)}`;
+    }
+
+    const localPath = path.join(this.tempFolder, filename);
+
+    console.log(`[Processor] Downloading: ${s3Url} → ${localPath}`);
+
+    try {
+      await downloadFileS3(this.s3, path.basename(s3Url), localPath);
+    } catch (err) {
+      const msg = (err as Error).message;
+
+      // 4xx → the key doesn't exist or we have no access. Dead-letter immediately.
+      if (/S3 GET failed: 4\d\d/.test(msg)) {
+        throw new PermanentFailureError(`Bad S3 key, won't retry: ${msg}`);
+      }
+      
+      if (/S3 GET failed: 500/.test(msg)) {
+        throw new PermanentFailureError(
+          `S3 returned 500 for this key — file unrecoverable, dead-lettering: ${s3Url}`,
+        );
+      }
+
+      // 502 / 503 / 504 → upstream/gateway issue, may resolve. Allow retry.
+      throw err;
+    }
+
     let result: OcrResult;
-    console.log("now processing file with filepath: ", filepath);
-    if (filepath === "/") {
-      console.log("Ignoring invalid filepath /");
-      return;
-    }
-    const isLocal =
-      !filepath.startsWith("http://") && !filepath.startsWith("https://");
-
-    let origServerPath: string | null = null;
-    let isRemote = false;
-
-    if (isLocal && !fs.existsSync(filepath)) {
-      // sanitizeFilePath BEFORE formatFilename so the UUID suffix
-      // is appended to an already-truncated name, not a 200-char one
-      const safeFilepath = sanitizeFilePath(filepath);
-      const newPath = path.join(
-        this.tempFolder!,
-        "documents",
-        await formatFilename(safeFilepath),
-      );
-      origServerPath = filepath;
-      await downloadFile(filepath, newPath, false);
-      filepath = newPath;
-      isRemote = true;
-    } else if (isLocal) {
-      isRemote = false;
-    } else {
-      isRemote = true;
-      fs.mkdirSync("./temp_consume", { recursive: true });
-      // sanitize before building localPath
-      const safeFilepath = sanitizeFilePath(filepath);
-      const localPath = path.join(
-        "./temp_consume",
-        `${getFilename(safeFilepath)}.${getExtension(safeFilepath)}`,
-      );
-
-      await downloadFile(filepath, localPath, true);
-      console.log("downloaded to:", localPath);
-      filepath = localPath;
-    }
-
-    if (model === OcrModel.Paddle) {
-      if (this.PaddleOcrObj === null) {
-        throw Error(
-          "the PaddleOcrObj in the fileprocessor is null/wasnt initilized correctly",
+    try {
+      result =
+        model === OcrModel.Paddle
+          ? await this.paddle.getOcr(this.s3, localPath)
+          : await this.tesseract.getDocumentOcr(localPath);
+    } finally {
+      // Always clean up the local download, even if OCR throws.
+      // (Paddle.ts also removes its own temp files, so force:true is harmless.)
+      await fs
+        .rm(localPath, { force: true })
+        .catch((e) =>
+          console.warn(
+            `[Processor] Failed to delete temp file: ${localPath}`,
+            e,
+          ),
         );
-      }
-      result = await this.PaddleOcrObj.getOcr(
-        filepath,
-        origServerPath,
-        isRemote,
-      );
-    } else {
-      if (this.TesseractOcrObj === null) {
-        throw Error(
-          "the TesseractOcrObj in the fileprocessor is null/wasnt initilized correctly",
-        );
-      }
-      result = await this.TesseractOcrObj.getDocumentOcr(filepath);
     }
 
-    // Send result to output queue
-    if (this.queue === null) {
-      throw Error("Queue is not initialized");
-    }
-    if (!result.pages?.length) {
-      console.warn("Skipping OCR result with 0 pages:", filepath);
-      return;
+    if (!result!.pages?.length) {
+      throw new PermanentFailureError(`OCR returned 0 pages for ${s3Url}`);
     }
 
-    console.log("the result of the ocr has", result.pages.length, " pages");
-    await this.queue.sendMsg(result, queueName);
+    console.log(
+      `[Processor] OCR complete — ${result!.pages.length} page(s): ${result!.originalFilePath}`,
+    );
+
+    await this.queue.sendMsg(result!, QueueNames.consumeOcrOutput);
+  }
+
+  private assertReady(): void {
+    if (!this.ready)
+      throw new Error("FileProcessor not initialised — call init() first");
   }
 }
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const parentDir = path.resolve(__dirname, "..");
-
-const root = process.env.ROOT_DIR ?? parentDir;
-const consumeFolder = path.join(root, ImportantDirs.consume);
-const consumedFolder = path.join(root, ImportantDirs.consumed);
-const tempFolder = path.join(root, ImportantDirs.temp);
-
-const dirs = [root, consumeFolder, consumedFolder, tempFolder];
-
-for (const dir of dirs) {
-  fs.mkdirSync(dir, { recursive: true });
-  console.log("initing path", dir);
-}
-
-console.log("AMQP:", process.env.AMQP_URL);
-
-await Promise.all([new FileProcessor().init("en", tempFolder)]);

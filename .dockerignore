@@ -1,7 +1,7 @@
 node_modules
 .git
 temp/
-backend/temp_consume/
+backend_js/temp_consume/
 consumed_files/
 consume_files/
 docker/meili_data/
@@ -11,5 +11,12 @@ docker/meili_data/
 *.png
 *.jpg
 *.jpeg
+*.webp
 *.zip
-/backend/banner_imgs
+/backend_js/banner_imgs
+*.pem
+.DS_Store
+*.cpuprofile
+*.txt
+.DS_Store
+/docker

@@ -1,19 +1,27 @@
 import amqp, {
   Connection,
   Channel,
+  ConfirmChannel,
   Message,
   ConsumeMessage,
   Replies,
 } from "amqplib";
 import "dotenv/config";
-import { QueueStats } from "../utils/types/main";
+import { QueueNames, QueueStats } from "../utils/types/main";
+import crypto from "crypto";
+
+export class PermanentFailureError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PermanentFailureError";
+  }
+}
 
 interface ConsumerOptions {
   noAck?: boolean;
   manualAck?: boolean;
 }
 
-// ─── Dual-window rolling counter ──────────────────────────────
 class RollingCounter {
   private events: number[] = [];
   total = 0;
@@ -41,12 +49,10 @@ class RollingCounter {
   }
 }
 
-// ─── Per-worker download tracking ────────────────────────────
-
 export interface WorkerDownloadEntry {
   filename: string;
   bytes: number;
-  at: number; // unix ms
+  at: number;
 }
 
 export interface WorkerDownloadRecord {
@@ -55,11 +61,9 @@ export interface WorkerDownloadRecord {
   totalBytes: number;
   firstSeenAt: number;
   lastSeenAt: number;
-  /** Ring buffer, max 20 entries, newest last */
   recentFiles: WorkerDownloadEntry[];
 }
 
-// ─── Per-consumer stats from management API ───────────────────
 export interface ConsumerDetail {
   consumerTag: string;
   queue: string;
@@ -81,13 +85,12 @@ export interface PeekedMessage {
 
 export class QueueHandler {
   private connection: Connection | null = null;
-  private channel: Channel | null = null;
+  private channel: ConfirmChannel | null = null;
 
   private managementUrl: string;
   private managementAuth: string;
   private vhost: string = "/";
-
-  private readonly PREFETCH = 2;
+  private clientCreatedAt = Date.now();
 
   private counters = {
     published: new RollingCounter(),
@@ -97,11 +100,8 @@ export class QueueHandler {
     agentDownloads: new RollingCounter(),
   };
 
-  // Per-IP download stats — persists for the lifetime of the process
   private workerDownloads = new Map<string, WorkerDownloadRecord>();
-
   private inFlightMessages = 0;
-  private clientCreatedAt = Date.now();
 
   constructor(
     managementUrl: string,
@@ -115,13 +115,14 @@ export class QueueHandler {
     this.vhost = vhost;
   }
 
-  private ensureChannel(): asserts this is this & { channel: Channel } {
+  private ensureChannel(): asserts this is this & { channel: ConfirmChannel } {
     if (!this.channel)
       throw new Error("Channel not initialized. Use QueueHandler.create()");
   }
 
   static async create(
     url = process.env.AMQP_URL,
+    customPrefetch = 1,
     managementUrl = process.env.RABBITMQ_MANAGEMENT_URL ||
       "http://localhost:15672",
     credentials = {
@@ -131,14 +132,49 @@ export class QueueHandler {
     vhost = "/",
   ): Promise<QueueHandler> {
     if (!url) throw new Error("AMQP_URL is missing");
+
     const instance = new QueueHandler(managementUrl, credentials, vhost);
-    instance.connection = await amqp.connect(url);
-    instance.channel = await instance.connection.createChannel();
-    await instance.channel.prefetch(instance.PREFETCH);
+
+    const urlObj = new URL(url);
+    urlObj.searchParams.set("heartbeat", "30"); // Lower heartbeat to detect dead connections faster
+    const balancedUrl = urlObj.toString();
+
+    console.log(`[QueueHandler]: Connecting to broker at ${urlObj.host}...`);
+    instance.connection = await amqp.connect(balancedUrl, { timeout: 10000 });
+
+    instance.connection.on("error", (err) => {
+      console.error(
+        "⚠️ [QueueHandler]: Connection error encountered:",
+        err.message,
+      );
+    });
+
+    instance.connection.on("close", (err) => {
+      console.warn(
+        "🛑 [QueueHandler]: AMQP connection interface closed down:",
+        err?.message || "No error details context provided.",
+      );
+    });
+
+    const baseChannel = await instance.connection.createConfirmChannel();
+    instance.channel = baseChannel;
+
+    baseChannel.on("error", (err) => {
+      console.error(
+        "⚠️ [QueueHandler]: Underlying channel exception occurred:",
+        err.message,
+      );
+    });
+
+    await instance.channel.prefetch(customPrefetch);
+
+    // Bootstrap queues sequentially to guarantee initialization safety
+    for (const queueName of Object.values(QueueNames)) {
+      await instance.assertQueue(queueName);
+    }
+
     return instance;
   }
-
-  // ── Management API helpers ───────────────────────────────────
 
   private encodedVhost() {
     return this.vhost === "/" ? "%2F" : encodeURIComponent(this.vhost);
@@ -155,7 +191,7 @@ export class QueueHandler {
     return res.json();
   }
 
-  async fetchQueueData(queueName: string) {
+  private async fetchQueueData(queueName: string) {
     return this.mgmtGet(
       `/queues/${this.encodedVhost()}/${encodeURIComponent(queueName)}`,
     );
@@ -232,49 +268,64 @@ export class QueueHandler {
 
   async getQueueStats(queueName: string): Promise<QueueStats> {
     this.ensureChannel();
-    const queueData = await this.fetchQueueData(queueName);
-    const totalConsumers = queueData.consumers ?? 0;
-    const busyConsumers = Math.min(totalConsumers, this.inFlightMessages);
-
-    return {
-      queue: queueName,
-      messages: queueData.messages ?? 0,
-      readyMessages: queueData.messages_ready ?? 0,
-      unackedMessages: queueData.messages_unacknowledged ?? 0,
-      consumers: totalConsumers,
-      busyConsumers,
-      idleConsumers: Math.max(totalConsumers - busyConsumers, 0),
-      published: this.counters.published.total,
-      consumed: this.counters.consumed.total,
-      acked: this.counters.acked.total,
-      nacked: this.counters.nacked.total,
-      inFlightMessages: this.inFlightMessages,
-      ackRatePerSec: this.counters.acked.ratePerSec(30_000) ?? 0,
-      publishRatePerSec: this.counters.published.ratePerSec(30_000) ?? 0,
-      consumeRatePerSec: this.counters.consumed.ratePerSec(30_000) ?? 0,
-      nackRatePerSec: this.counters.nacked.ratePerSec(30_000) ?? 0,
-      clientUptimeMs: Date.now() - this.clientCreatedAt,
-      createdAt: this.clientCreatedAt,
-      lastMessageAt: this.counters.acked.lastEventAt(),
-      processingBacklog:
-        (queueData.messages_ready ?? 0) > totalConsumers * this.PREFETCH,
-    };
+    try {
+      const queueData = await this.fetchQueueData(queueName);
+      const totalConsumers = queueData.consumers ?? 0;
+      const busyConsumers = Math.min(totalConsumers, this.inFlightMessages);
+      return {
+        queue: queueName,
+        messages: queueData.messages ?? 0,
+        readyMessages: queueData.messages_ready ?? 0,
+        unackedMessages: queueData.messages_unacknowledged ?? 0,
+        consumers: totalConsumers,
+        busyConsumers,
+        idleConsumers: Math.max(totalConsumers - busyConsumers, 0),
+        published: this.counters.published.total,
+        consumed: this.counters.consumed.total,
+        acked: this.counters.acked.total,
+        nacked: this.counters.nacked.total,
+        inFlightMessages: this.inFlightMessages,
+        ackRatePerSec: this.counters.acked.ratePerSec(30_000) ?? 0,
+        publishRatePerSec: this.counters.published.ratePerSec(30_000) ?? 0,
+        consumeRatePerSec: this.counters.consumed.ratePerSec(30_000) ?? 0,
+        nackRatePerSec: this.counters.nacked.ratePerSec(30_000) ?? 0,
+        clientUptimeMs: Date.now() - this.clientCreatedAt,
+        createdAt: this.clientCreatedAt,
+        lastMessageAt: this.counters.acked.lastEventAt(),
+        processingBacklog:
+          (queueData.messages_ready ?? 0) > totalConsumers * 20,
+      };
+    } catch (e: any) {
+      // Fallback response if management API is polled mid-boot
+      return {
+        queue: queueName,
+        messages: 0,
+        readyMessages: 0,
+        unackedMessages: 0,
+        consumers: 0,
+        busyConsumers: 0,
+        idleConsumers: 0,
+        published: this.counters.published.total,
+        consumed: this.counters.consumed.total,
+        acked: this.counters.acked.total,
+        nacked: this.counters.nacked.total,
+        inFlightMessages: this.inFlightMessages,
+        ackRatePerSec: 0,
+        publishRatePerSec: 0,
+        consumeRatePerSec: 0,
+        nackRatePerSec: 0,
+        clientUptimeMs: Date.now() - this.clientCreatedAt,
+        createdAt: this.clientCreatedAt,
+        lastMessageAt: null,
+        processingBacklog: false,
+      };
+    }
   }
 
-  // ── Download tracking (per-worker IP) ────────────────────────
-
-  /**
-   * Call this from /download/consume.
-   * @param ip      The OCR worker's IP address (from X-Forwarded-For or socket)
-   * @param filename Basename of the file being served
-   * @param bytes   File size in bytes (from fs.statSync)
-   */
   recordAgentDownload(ip: string, filename: string, bytes: number) {
     this.counters.agentDownloads.record();
-
     const entry: WorkerDownloadEntry = { filename, bytes, at: Date.now() };
     const existing = this.workerDownloads.get(ip);
-
     if (!existing) {
       this.workerDownloads.set(ip, {
         ip,
@@ -289,12 +340,10 @@ export class QueueHandler {
       existing.totalBytes += bytes;
       existing.lastSeenAt = Date.now();
       existing.recentFiles.push(entry);
-      // Keep only the 20 most recent files
       if (existing.recentFiles.length > 20) existing.recentFiles.shift();
     }
   }
 
-  /** Returns all known workers sorted by most recently active. */
   getWorkerDownloadStats(): WorkerDownloadRecord[] {
     return Array.from(this.workerDownloads.values()).sort(
       (a, b) => b.lastSeenAt - a.lastSeenAt,
@@ -306,7 +355,6 @@ export class QueueHandler {
     const ack60 = this.counters.acked.ratePerSec(60_000);
     const dl30 = this.counters.agentDownloads.ratePerSec(30_000);
     const dl60 = this.counters.agentDownloads.ratePerSec(60_000);
-
     return {
       pages_per_minute_30s: ack30 !== null ? ack30 * 60 : null,
       pages_per_minute_60s: ack60 !== null ? ack60 * 60 : null,
@@ -319,13 +367,21 @@ export class QueueHandler {
     };
   }
 
-  // ── Queue AMQP operations ────────────────────────────────────
-
   async assertQueue(queueName: string): Promise<Replies.AssertQueue> {
     this.ensureChannel();
+    const poisonQueueName = `${queueName}_poison`;
+    await this.channel.assertQueue(poisonQueueName, { durable: true });
+
     return this.channel.assertQueue(queueName, {
       durable: true,
-      arguments: { "x-queue-type": "quorum" },
+      arguments: {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 5,
+        "x-dead-letter-exchange": "",
+        "x-dead-letter-routing-key": poisonQueueName,
+        // Note: Deduplication requires the 'rabbitmq_message_deduplication' plugin active on the broker
+        "x-message-deduplication": true,
+      },
     });
   }
 
@@ -337,10 +393,32 @@ export class QueueHandler {
     this.ensureChannel();
     const payload =
       typeof message === "string" ? message : JSON.stringify(message);
-    await this.assertQueue(queueName);
-    const ok = this.channel.sendToQueue(queueName, Buffer.from(payload), opts);
-    this.counters.published.record();
-    if (!ok) await new Promise<void>((r) => this.channel!.once("drain", r));
+
+    const messageId = crypto.createHash("md5").update(payload).digest("hex");
+
+    await new Promise<void>((resolve, reject) => {
+      if (!this.channel)
+        return reject(
+          new Error(
+            "[QueueHandler]: Channel dropped before delivery completed",
+          ),
+        );
+
+      this.channel.sendToQueue(
+        queueName,
+        Buffer.from(payload),
+        { ...opts, messageId },
+        (err, ok) => {
+          if (err) {
+            return reject(
+              new Error(`[Queue] Message rejected by broker: ${err.message}`),
+            );
+          }
+          this.counters.published.record();
+          resolve();
+        },
+      );
+    });
   }
 
   async addQueueOnReceive<T = unknown>(
@@ -366,16 +444,29 @@ export class QueueHandler {
           } catch {
             parsed = content as T;
           }
+
           await onReceive(parsed, msg);
-          if (!noAck && !manualAck) {
-            this.channel!.ack(msg);
+
+          if (!noAck && !manualAck && this.channel) {
+            this.channel.ack(msg);
             this.counters.acked.record();
           }
         } catch (err) {
-          console.error("Message handler error:", err);
-          if (!noAck && !manualAck) {
-            this.channel!.nack(msg, false, false);
-            this.counters.nacked.record();
+          this.counters.nacked.record();
+          if (!noAck && !manualAck && this.channel) {
+            if (err instanceof PermanentFailureError) {
+              console.error(
+                "[Queue] Permanent failure — routing to poison queue:",
+                err.message,
+              );
+              this.channel.nack(msg, false, false);
+            } else {
+              console.error(
+                "[Queue] Transient failure — requeueing for retry:",
+                err,
+              );
+              this.channel.nack(msg, false, true);
+            }
           }
         } finally {
           this.inFlightMessages--;
@@ -399,11 +490,11 @@ export class QueueHandler {
 
   async close(): Promise<void> {
     if (this.channel) {
-      await this.channel.close();
+      await this.channel.close().catch(() => {});
       this.channel = null;
     }
     if (this.connection) {
-      await this.connection.close();
+      await this.connection.close().catch(() => {});
       this.connection = null;
     }
   }

@@ -14,6 +14,16 @@ export enum FileTypes {
   pdf = ".pdf",
 }
 
+export type BatchImgBuffered = {
+  buffer: Buffer;
+  outputPath: string;
+  idx: number;
+};
+
+export type BatchImgWritten = {
+  outputPath: string;
+  idx: number;
+};
 export interface QueueStats {
   queue: string;
 
@@ -76,6 +86,7 @@ export interface LineOcr {
 }
 
 export interface PageOcr {
+  pageNumber: number;
   lines: LineOcr[];
   bannerImgpath: string;
 }
@@ -83,6 +94,7 @@ export interface PageOcr {
 export interface OcrResult {
   pages: PageOcr[];
   originalFilePath: string;
+  fileHash: string;
 }
 
 export const ImportantDirs = {
@@ -90,3 +102,14 @@ export const ImportantDirs = {
   temp: "temp",
   consumed: "consumed_files",
 } as const;
+
+export interface RawBlockNormalized {
+  text: string;
+  confidence: number;
+  bbox: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+}

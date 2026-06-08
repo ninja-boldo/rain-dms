@@ -2,116 +2,110 @@ import { Meilisearch } from "meilisearch";
 import { documentsTable, pagesTable } from "../db/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, gt, asc } from "drizzle-orm";
-import "dotenv/config";
- 
 
-const client = new Meilisearch({
-  host: "http://127.0.0.1:7700",
-  apiKey: process.env.MEILI_MASTER_KEY,
-});
-
-const db = drizzle(process.env.DATABASE_URL!);
-const index = client.index("documents");
-
+let meilisearchClient: Meilisearch | null = null;
+let dbInstance: any = null;
 let isSyncing = false;
 let lastIndexedAt = new Date("1021-03-25");
 
-async function runSync() {
-  if (isSyncing) {
-    console.log("sync already running");
-    return;
+export async function getMeilisearch() {
+  if (!meilisearchClient) {
+    meilisearchClient = new Meilisearch({
+      host: "http://127.0.0.1:7700",
+      apiKey: process.env.MEILI_MASTER_KEY ?? "masterbenno",
+    });
   }
+  return meilisearchClient;
+}
 
+async function getDb() {
+  if (!dbInstance) {
+    dbInstance = drizzle(process.env.DATABASE_URL!);
+  }
+  return dbInstance;
+}
+
+async function runSync() {
+  if (isSyncing) return;
   isSyncing = true;
 
   try {
+    const client = await getMeilisearch();
+    const db = await getDb();
+    const index = client.index("documents");
     const stats = await index.getStats();
     if (stats.numberOfDocuments === 0) {
-      console.log("index is empty, forcing full sync");
       lastIndexedAt = new Date("1021-03-25");
     }
 
-    console.log("checking for new docs");
+    while (true) {
+      const docs = await db
+        .select({
+          id: documentsTable.file_id,
+          filepath: documentsTable.filepath,
+          created_at: documentsTable.createdAt,
+          assigned_tags: documentsTable.assigned_tags,
+          ocr: pagesTable.ocr,
+          banner_img: pagesTable.page_banner_url,
+          pageIdx: pagesTable.page_idx,
+        })
+        .from(documentsTable)
+        .innerJoin(pagesTable, eq(pagesTable.file_id, documentsTable.file_id))
+        .where(gt(documentsTable.createdAt, lastIndexedAt))
+        .orderBy(asc(documentsTable.createdAt), asc(pagesTable.page_idx))
+        .limit(500);
 
-    const docs = await db
-      .select({
-        id: documentsTable.file_id,
-        filepath: documentsTable.filepath,
-        created_at: documentsTable.createdAt,
-        assigned_tags: documentsTable.assigned_tags,
-        user_id: documentsTable.user_id,
-        ocr: pagesTable.ocr,
-        banner_img: pagesTable.page_banner_url,
-        pageIdx: pagesTable.page_idx,
-      })
-      .from(documentsTable)
-      .innerJoin(pagesTable, eq(pagesTable.file_id, documentsTable.file_id))
-      .where(gt(documentsTable.createdAt, lastIndexedAt))
-      .orderBy(asc(documentsTable.createdAt), asc(pagesTable.page_idx));
+      if (docs.length === 0) break;
 
-    if (docs.length === 0) {
-      console.log("no new docs");
-      return;
+      const docsToIndex = docs.map((doc) => {
+        let parsedTags: string[] = [];
+        if (Array.isArray(doc.assigned_tags)) {
+          parsedTags = doc.assigned_tags.map(String);
+        } else if (typeof doc.assigned_tags === "string") {
+          try {
+            const parsed = JSON.parse(doc.assigned_tags);
+            parsedTags = Array.isArray(parsed)
+              ? parsed.map(String)
+              : [String(doc.assigned_tags)];
+          } catch {
+            parsedTags = doc.assigned_tags
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean);
+          }
+        }
+
+        let searchableText = "";
+        if (doc.ocr && typeof doc.ocr === "object") {
+          const ocrObj = doc.ocr as any;
+          if (Array.isArray(ocrObj.lines)) {
+            searchableText = ocrObj.lines
+              .flatMap((line: any) =>
+                Array.isArray(line.boxes)
+                  ? line.boxes.map((b: any) => b.text)
+                  : [],
+              )
+              .join(" ");
+          }
+        }
+
+        return {
+          id: `${doc.id}_${doc.pageIdx}`,
+          file_id: doc.id,
+          filepath: doc.filepath,
+          pageIdx: doc.pageIdx,
+          assigned_tags: parsedTags,
+          searchable_text: searchableText,
+          banner_img: doc.banner_img,
+          created_at: doc.created_at,
+        };
+      });
+
+      const task = await index.addDocuments(docsToIndex, { primaryKey: "id" });
+      await client.tasks.waitForTask(task.taskUid, { timeout: 1000 * 60 * 15 });
+      lastIndexedAt = docs[docs.length - 1].created_at;
+      if (docs.length < 200) break;
     }
-
-    console.log(`fetched ${docs.length} rows`);
-
-    const docsToIndex = docs.map((doc) => {
-      let parsedTags: string[] = [];
-
-      if (Array.isArray(doc.assigned_tags)) {
-        parsedTags = doc.assigned_tags.map(String);
-      } else if (typeof doc.assigned_tags === "string") {
-        try {
-          const parsed = JSON.parse(doc.assigned_tags);
-          parsedTags = Array.isArray(parsed)
-            ? parsed.map(String)
-            : [String(doc.assigned_tags)];
-        } catch {
-          parsedTags = doc.assigned_tags
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean);
-        }
-      }
-
-      let searchableText = "";
-
-      if (doc.ocr && typeof doc.ocr === "object") {
-        const ocrObj = doc.ocr as any;
-
-        if (Array.isArray(ocrObj.lines)) {
-          searchableText = ocrObj.lines
-            .flatMap((line: any) =>
-              Array.isArray(line.boxes)
-                ? line.boxes.map((b: any) => b.text)
-                : [],
-            )
-            .join(" ");
-        }
-      }
-
-      return {
-        id: `${doc.id}_${doc.pageIdx}`,
-        file_id: doc.id,
-        filepath: doc.filepath,
-        pageIdx: doc.pageIdx,
-        assigned_tags: parsedTags,
-        searchable_text: searchableText,
-        banner_img: doc.banner_img,
-        created_at: doc.created_at,
-        user_id: doc.user_id,
-        ocr: doc.ocr, // Store full OCR here for the frontend!
-      };
-    });
-
-    console.log(`indexing ${docsToIndex.length} docs`);
-
-    const task = await index.addDocuments(docsToIndex, { primaryKey: "id" });
-    await client.tasks.waitForTask(task.taskUid);
-    console.log("finished indexing");
-
-    lastIndexedAt = docs[docs.length - 1].created_at;
   } catch (err) {
     console.error("index sync failed:", err);
   } finally {
@@ -120,23 +114,18 @@ async function runSync() {
 }
 
 export async function syncIndex(intervalMs = 15000) {
-  console.log("starting index sync worker");
-
+  const client = await getMeilisearch();
+  const index = client.index("documents");
   await index.updateFilterableAttributes([
     "assigned_tags",
     "file_id",
     "pageIdx",
-    "user_id",
   ]);
   await index.updateSearchableAttributes([
     "searchable_text",
     "filepath",
     "assigned_tags",
   ]);
-
   await runSync();
-
-  setInterval(() => {
-    runSync().catch(console.error);
-  }, intervalMs);
+  setInterval(() => runSync().catch(console.error), intervalMs);
 }
