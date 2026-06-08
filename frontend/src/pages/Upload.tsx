@@ -9,15 +9,16 @@ const ALLOWED_TYPES = [
   "image/png",
   "image/jpeg",
   "image/jpg",
+  "image/webp",
 ];
-const ALLOWED_EXT = /\.(pdf|png|jpg|jpeg)$/i;
+const ALLOWED_EXT = /\.(pdf|png|jpg|jpeg|webp)$/i;
 
 function isAllowedFile(f: File): boolean {
   return ALLOWED_TYPES.includes(f.type) || ALLOWED_EXT.test(f.name);
 }
 
 export default function Upload() {
-  const { t, settings } = useApp();
+  const { t, settings, getAuthHeaders } = useApp();
   const [files, setFiles] = useState<File[]>([]);
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("");
@@ -68,6 +69,7 @@ export default function Upload() {
       const res = await fetch(`${settings.serverUrl}${endpoint}`, {
         method: "POST",
         body: formData,
+        headers: getAuthHeaders(),
       });
       console.warn(`res: ${res}`);
 

@@ -1,59 +1,209 @@
-import { Screenshot } from "pdf-parse";
-import { ImageLike } from "tesseract.js";
-
 import fs from "fs/promises";
+import "dotenv/config";
 import { v4 as uuidv4 } from "uuid";
+import sharp from "sharp";
+import os from "os";
 import {
-  BoundingBoxOcr,
   BoxOcr,
   FileTypes,
   LineOcr,
   OcrResult,
   PageOcr,
 } from "../../utils/types/main";
-import { Box, PaddleOcrResult, RecognitionResult } from "ppu-paddle-ocr";
-import "dotenv/config";
+
 import path from "path";
 import { Poppler } from "node-poppler";
+import "dotenv/config";
+import { S3Client, PutObjectCommand, CreateBucketCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { createWriteStream } from "fs";
+import { pipeline } from "stream/promises";
 
+
+
+const crypto = require("crypto");
+import { sign } from "jsonwebtoken";
+import { ExtractionResult } from "@kreuzberg/node";
+import { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { documentsTable } from "../../db/schema";
+import { eq } from "drizzle-orm";
+import pLimit from "p-limit";
+
+const maxConcurrentUploadsS3 = pLimit(5);
 const poppler = new Poppler();
 
-export const pdfToImgPages = async (
+/* ---------------------------
+   FILE PATH HELPERS
+----------------------------*/
+
+export const changeFilenameForPath = (
+  filepath: string | undefined,
+  newFilename: string,
+) => {
+  if (!filepath) return newFilename;
+  return path.join(path.dirname(filepath), newFilename);
+};
+
+export const getFilename = (p: string | undefined) => {
+  if (!p) return "";
+  return path.parse(p).name;
+};
+
+export const getExtension = (p: string | undefined) => {
+  if (!p) return "";
+  return path.parse(p).ext.slice(1);
+};
+
+/* ---------------------------
+   URL / AUTH HELPERS
+----------------------------*/
+
+export const sanitizeUrl = (url: string): string => {
+  return `https://${url.replace(/^(?:https?:\/\/?)+/gi, "")}`;
+};
+
+/* ---------------------------
+   AUTH HEADER (cached JWT)
+----------------------------*/
+let _cachedToken: string | null = null;
+let _tokenExpiresAt = 0;
+const TOKEN_TTL_S = 60;
+
+export function getAuthHeader(): Headers {
+  const secret =
+    process.env.CLUSTER_WORKER_SECRET ?? "celestialisabadplaceholder";
+  const now = Math.floor(Date.now() / 1000);
+
+  // Regenerate token dynamically if it is close to expiring
+  if (!_cachedToken || now >= _tokenExpiresAt - 60) {
+    _tokenExpiresAt = now + TOKEN_TTL_S;
+    _cachedToken = sign(
+      {
+        exp: _tokenExpiresAt,
+        role: "worker",
+        iss: "rain-dms-watcher",
+      },
+      secret,
+    );
+  }
+
+  const h = new Headers();
+  // Pass the secure token via a custom channel so it doesn't conflict with S3 signatures
+  h.append("X-Auth-Token", _cachedToken);
+  return h;
+}
+
+/* ---------------------------
+   IMAGE → WEBP
+----------------------------*/
+export const imgToWebp = async (
+  origFilepath: string,
+  inplace: boolean = true,
+  quality: number = 70,
+): Promise<string> => {
+  const newFilename = `${getFilename(origFilepath)}.webp`;
+  const newPath = changeFilenameForPath(origFilepath, newFilename);
+
+  await sharp(origFilepath).webp({ quality }).toFile(newPath);
+
+  if (inplace) {
+    await fs.rm(origFilepath, { force: true }).catch(() => {});
+  }
+
+  return newPath;
+};
+
+/* ---------------------------
+   PDF → IMAGES
+----------------------------*/
+
+const PARALLEL_THRESHOLD = 20;
+const RE_PAGE_NUM = /-(\d+)\.(?:jpg|jpeg)$/i;
+
+async function renderPdfChunk(
+  filePath: string,
+  dir: string,
+  dpi: number,
+  firstPage?: number,
+  lastPage?: number,
+): Promise<string[]> {
+  const filePrefix = `page-${uuidv4()}`;
+  const targetPrefixPath = path.join(dir, filePrefix);
+
+  const opts: Record<string, unknown> = {
+    jpegFile: true,
+    resolutionXAxis: dpi,
+    resolutionYAxis: dpi,
+  };
+  if (firstPage !== undefined) opts.firstPageToConvert = firstPage;
+  if (lastPage !== undefined) opts.lastPageToConvert = lastPage;
+
+  await poppler.pdfToCairo(filePath, targetPrefixPath, opts);
+
+  const dirFiles = await fs.readdir(dir);
+  return dirFiles
+    .filter((f) => f.startsWith(filePrefix) && RE_PAGE_NUM.test(f))
+    .map((f) => ({ f, n: parseInt(f.match(RE_PAGE_NUM)![1], 10) }))
+    .sort((a, b) => a.n - b.n)
+    .map(({ f }) => path.join(dir, f));
+}
+
+export const pdfToImgPages = async function (
   filePath: string,
   baseTempDir: string,
-): Promise<string[]> => {
-  if (!filePath) {
-    throw new Error("ArgumentError: File path is required.");
+  dpi: number = 150,
+): Promise<string[]> {
+  if (!filePath) throw new Error("ArgumentError: File path is required.");
+
+  const stats = await fs.stat(filePath);
+  if (!stats.isFile()) throw new Error("Path is not a file");
+  if (stats.size < 100) throw new Error("Invalid PDF (too small)");
+
+  const outputDir = path.join(baseTempDir, uuidv4());
+  await fs.mkdir(outputDir, { recursive: true });
+
+  const numCpus = os.cpus().length;
+
+  let totalPages: number | null = null;
+  if (numCpus > 1) {
+    try {
+      const info = (await poppler.pdfInfo(filePath)) as string;
+      const m = info.match(/Pages:\s+(\d+)/i);
+      if (m) totalPages = parseInt(m[1], 10);
+    } catch {}
   }
 
-  try {
-    const outputDir = `${baseTempDir}/${uuidv4()}`;
+  const useParallel =
+    totalPages !== null && totalPages > PARALLEL_THRESHOLD && numCpus > 1;
 
-    await fs.mkdir(outputDir, { recursive: true });
-
-    const res: string = await poppler.pdfToCairo(
-      filePath,
-      `${outputDir}/page`,
-      {
-        jpegFile: true,
-      },
-    );
-
-    const files = await fs.readdir(outputDir);
-
-    const imagePaths = files
-      .filter((f) => f.endsWith(".jpg"))
-      .map((f) => `${outputDir}/${f}`)
-      .sort();
-    console.log("imagePaths: ", imagePaths);
-
-    return imagePaths;
-  } catch (error) {
-    throw new Error(
-      `failed for this filepath: ${filePath} with this error: ${error}`,
-    );
+  if (!useParallel) {
+    return renderPdfChunk(filePath, outputDir, dpi);
   }
+
+  const numChunks = Math.min(numCpus, Math.ceil(totalPages! / 10));
+  const chunkSize = Math.ceil(totalPages! / numChunks);
+
+  const chunks = Array.from({ length: numChunks }, (_, i) => {
+    const start = 1 + i * chunkSize;
+    const end = Math.min((i + 1) * chunkSize, totalPages!);
+    return { start, end, dir: path.join(outputDir, `c${i}`) };
+  });
+
+  await Promise.all(
+    chunks.map(({ dir }) => fs.mkdir(dir, { recursive: true })),
+  );
+
+  const chunkPaths = await Promise.all(
+    chunks.map(({ start, end, dir }) =>
+      renderPdfChunk(filePath, dir, dpi, start, end),
+    ),
+  );
+
+  return chunkPaths.flat();
 };
+
+/* ---------------------------
+   FILENAME FORMATTING
+----------------------------*/
 
 export const formatFilename = async (filepath: string): Promise<string> => {
   const ext = getExtension(filepath);
@@ -61,8 +211,6 @@ export const formatFilename = async (filepath: string): Promise<string> => {
 
   const suffix = `-${uuidv4()}-${new Date().toISOString().replace(/:/g, "-")}`;
   const suffixBytes = Buffer.byteLength(suffix + "." + ext, "utf8");
-
-  // Leave room for suffix + extension, hard cap at 200 bytes total name
   const allowedNameBytes = 200 - suffixBytes;
 
   let truncated = name;
@@ -73,286 +221,315 @@ export const formatFilename = async (filepath: string): Promise<string> => {
   return `${truncated}${suffix}.${ext}`;
 };
 
-const convertPaddleBox = (paddleBox: Box): BoundingBoxOcr => {
-  const parsedBox: BoundingBoxOcr = {
-    upLeftPoint: { x: paddleBox.x, y: paddleBox.y },
-    downRightPoint: {
-      x: paddleBox.x + paddleBox.width,
-      y: paddleBox.y + paddleBox.height,
-    },
+/* ---------------------------
+   PATH SANITIZER
+----------------------------*/
+
+function replaceUmlauts(str: string): string {
+  const umlautMap: Record<string, string> = {
+    ä: "ae",
+    ö: "oe",
+    ü: "ue",
+    Ä: "Ae",
+    Ö: "Oe",
+    Ü: "Ue",
+    ß: "ss",
   };
-  return parsedBox;
-};
-const parseRawLine = (line: RecognitionResult[]): LineOcr => {
-  const boxes: BoxOcr[] = line.map((singleCell) => {
-    // 1. Maintain the fully original "line" box for strict backwards compatibility
-    const originalBox: BoxOcr = {
-      text: singleCell.text,
-      confidence: singleCell.confidence,
-      boundingBox: convertPaddleBox(singleCell.box),
-      words: [],
-    };
-
-    // 2. Compute the sub-word bounding boxes
-    const words = singleCell.text.split(" ");
-    const totalChars = singleCell.text.length;
-
-    if (totalChars > 0) {
-      const boxWidth = singleCell.box.width;
-      const pxPerChar = boxWidth / totalChars;
-      let currentX = singleCell.box.x;
-
-      words.forEach((word) => {
-        if (!word) return;
-        const wordWidth = word.length * pxPerChar;
-
-        originalBox.words!.push({
-          text: word,
-          confidence: singleCell.confidence,
-          boundingBox: {
-            upLeftPoint: { x: currentX, y: singleCell.box.y },
-            downRightPoint: {
-              x: currentX + wordWidth,
-              y: singleCell.box.y + singleCell.box.height,
-            },
-          },
-        });
-
-        currentX += wordWidth + pxPerChar;
-      });
-    }
-
-    return originalBox;
-  });
-
-  return { boxes };
-};
-const parseRawLines = (linesRaw: RecognitionResult[][]): LineOcr[] => {
-  const newLines: LineOcr[] = linesRaw.map((lineRaw) => parseRawLine(lineRaw));
-  return newLines;
-};
-
-export const parseRawPagesPaddleOcr = async (
-  rawPages: {
-    [imgFilePath: string]: PaddleOcrResult;
-  },
-  filepath: string,
-): Promise<OcrResult> => {
-  const pages: PageOcr[] = [];
-  for (const pageFilepath of Object.keys(rawPages)) {
-    const ocrRes: PaddleOcrResult = rawPages[pageFilepath];
-    const lines = ocrRes.lines;
-
-    pages.push({ lines: parseRawLines(lines), bannerImgpath: pageFilepath });
-  }
-  return { pages: pages, originalFilePath: filepath };
-};
-
-export const getFilename = (fullFilepath: string): string => {
-  return path.parse(fullFilepath).name;
-};
-
-export const getExtension = (fullFilepath: string): string => {
-  // for /../../test.ts this would return ts
-  return path.parse(fullFilepath).ext.slice(1);
-};
+  return str.replace(/[äöüÄÖÜß]/g, (match) => umlautMap[match]);
+}
 
 export function sanitizeFilePath(
   inputPath: string,
   maxNameBytes: number = 200,
+  appendUuid: boolean = false,
 ): string {
   const dir = path.dirname(inputPath);
   const ext = path.extname(inputPath);
   const name = path.basename(inputPath, ext);
 
-  const sanitizedName = name
+  let sanitizedName = name
     .replace(/\s+/g, "_")
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, "")
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "");
+  sanitizedName = replaceUmlauts(sanitizedName);
 
-  // Truncate to maxNameBytes, accounting for the extension
+  if (appendUuid) sanitizedName += "-" + uuidv4();
+
   const extBytes = Buffer.byteLength(ext, "utf8");
-  const allowedNameBytes = maxNameBytes - extBytes;
+  const allowed = maxNameBytes - extBytes;
 
   let truncated = sanitizedName || "unnamed";
-  while (Buffer.byteLength(truncated, "utf8") > allowedNameBytes) {
-    // Slice by char to avoid cutting mid-surrogate-pair
+  while (Buffer.byteLength(truncated, "utf8") > allowed) {
     truncated = [...truncated].slice(0, -1).join("");
   }
 
   return path.join(dir, truncated + ext);
 }
 
-export const getImgDirAmendment = (
-  filepath: string,
-  excludeDir: string = "temp",
-): string => {
-  // an img is saved like this in the temp folder ..../temp/[docu-uuid]/page-x.jpg
-  // and this is meant to return this part [docu-uuid]/page-x.jpg so you build the uploads url for nginx
+/* ---------------------------
+   KREUZBERG RESULT PARSING
+----------------------------*/
 
-  let lastSlash = filepath.lastIndexOf("/");
-  console.log("=".repeat(30));
-  console.log("running for this filepath: ", filepath);
-  if (lastSlash === -1) return filepath;
+const mapLineToBoxOcr = (line: any): BoxOcr => {
+  // Types.ts states PaddleOCR geometry targets OcrBoundingGeometryQuadrilateral (points: number[][])
+  const points: number[][] = line.geometry?.points ?? [];
 
-  const secondLastSlash = filepath.lastIndexOf("/", lastSlash - 1);
-  if (secondLastSlash === -1) return filepath.slice(lastSlash + 1);
-  if (filepath.slice(secondLastSlash + 1).startsWith(excludeDir)) {
-    console.warn(
-      `reslicing for this dir cause it includes ${excludeDir}: ${filepath}`,
-    );
-    console.log("=".repeat(30));
-    return filepath.slice(lastSlash + 1);
+  let minX = 0,
+    minY = 0,
+    maxX = 0,
+    maxY = 0;
+
+  if (points.length > 0) {
+    minX = maxX = points[0][0];
+    minY = maxY = points[0][1];
+
+    for (let i = 1; i < points.length; i++) {
+      const x = points[i][0];
+      const y = points[i][1];
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  } else if (line.geometry?.type === "rectangle") {
+    minX = line.geometry.left;
+    minY = line.geometry.top;
+    maxX = minX + line.geometry.width;
+    maxY = minY + line.geometry.height;
   }
-  console.log(
-    `returning normal filepath slice: ${filepath.slice(secondLastSlash + 1)}`,
+
+  return {
+    text: line.text ?? "",
+    confidence: line.confidence?.recognition ?? null,
+    boundingBox: {
+      upLeftPoint: { x: minX, y: minY },
+      downRightPoint: { x: maxX, y: maxY },
+    },
+  };
+};
+
+const mapPage = (
+  pageNumber: number,
+  bannerImgpath: string,
+  elements: any[],
+): PageOcr => {
+  return {
+    pageNumber,
+    bannerImgpath,
+    lines: elements.map(
+      (line: any): LineOcr => ({
+        boxes: [mapLineToBoxOcr(line)],
+      }),
+    ),
+  };
+};
+
+export const parseRawPagesKreuzberg = async (
+  nativeResult: ExtractionResult,
+  finalPageUrls: string[],
+  originalFilePath: string,
+  hash: string,
+): Promise<OcrResult> => {
+  // Types.ts maps granular line blocks strictly to the root ocrElements sequence
+  const globalElements = nativeResult.ocrElements ?? [];
+  const rawPages = nativeResult.pages ?? [];
+
+  let pages: PageOcr[] = [];
+
+  if (rawPages.length > 0) {
+    pages = rawPages.map((page: any, idx: number) => {
+      const pageNum = page.pageNumber ?? idx + 1;
+      const pageElements = globalElements.filter(
+        (el: any) => el.pageNumber === pageNum,
+      );
+      return mapPage(pageNum, finalPageUrls[idx] ?? "", pageElements);
+    });
+  } else {
+    pages = [mapPage(1, finalPageUrls[0] ?? "", globalElements)];
+  }
+
+  return { pages, originalFilePath, fileHash: hash };
+};
+
+/* ---------------------------
+   FILE API (download / upload / delete)
+----------------------------*/
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
+export function getS3Client(): S3Client {
+  const client = new S3Client({
+    region: "us-east-1",
+    endpoint: process.env.S3_ENDPOINT!.replace(/\/$/, ""),
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: process.env.S3_ACCESS_KEY ?? "rain-dms",
+      secretAccessKey: process.env.S3_SECRET_KEY ?? "rain-dms",
+    },
+  });
+
+  client.middlewareStack.add(
+    (next) => async (args) => {
+      const req = args.request as any;
+      getAuthHeader().forEach((value, key) => {
+        req.headers[key] = value;
+      });
+      return next(args);
+    },
+    { step: "finalizeRequest", priority: "low", name: "authHeaderMiddleware" },
   );
-  console.log("=".repeat(30));
-  return filepath.slice(secondLastSlash + 1);
+
+  return client;
+}
+
+export const uploadGenericS3 = async (
+  client: S3Client,
+  bucket: string,
+  objectKey: string,
+  fileBuffer: Buffer,
+  mimeType?: string,
+): Promise<void> => {
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: objectKey,
+      Body: fileBuffer,
+      ...(mimeType && { ContentType: mimeType }),
+    }),
+  );
 };
 
-export const convertImgPathToUrl = (filepath: string): string => {
-  const dirAmendment = getImgDirAmendment(filepath);
-  const baseUrl: string = process.env.BASE_SITE_URL;
-  const nginxPort: number = 7701;
-  if (!baseUrl) {
-    throw Error(
-      "couldnt retrieve base site url from the .env file(should be something like http://192.168.1.163) ",
-    );
+export async function uploadManyS3(
+  client: S3Client,
+  files: string[],
+  deleteAfterUpload: boolean = false,
+): Promise<string[]> {
+  const keys = await Promise.all(
+    files.map((filepath) =>
+      maxConcurrentUploadsS3(async () => {
+        const objectKey = await formatFilename(filepath);
+        const fileBuffer = await fs.readFile(filepath);
+        await uploadGenericS3(client, "uploads", objectKey, fileBuffer);
+        return objectKey;
+      }),
+    ),
+  );
+  if (deleteAfterUpload) {
+    await Promise.all(files.map((f) => fs.rm(f)));
+  }
+  return keys;
+}
+
+export const initBuckets = async (client: S3Client): Promise<void> => {
+  const buckets = ["uploads"];
+  await Promise.all(
+    buckets.map(async (bucket) => {
+      try {
+        await client.send(new CreateBucketCommand({ Bucket: bucket }));
+      } catch (err: any) {
+        if (err?.name !== "BucketAlreadyExists" && err?.name !== "BucketAlreadyOwnedByYou") {
+          throw err;
+        }
+      }
+    }),
+  );
+};
+
+export async function downloadFileS3(
+  client: S3Client,
+  key: string,
+  outputPath: string,
+  bucket: string = "uploads",
+): Promise<string> {
+  const response = await client.send(
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+  );
+
+  if (!response.Body) {
+    throw new Error("No response body returned from S3");
   }
 
-  return `${baseUrl}:${nginxPort.toString()}/uploads/${dirAmendment}`;
-};
+  await pipeline(
+    response.Body as unknown as NodeJS.ReadableStream,
+    createWriteStream(outputPath),
+  );
+
+  return outputPath;
+}
+/* ---------------------------
+   TEMP IMAGE SAVE
+----------------------------*/
 
 export const saveImgToTemp = async (
   data: Uint8Array,
   filepathBase: string = `${process.env.ROOT_DIR}/temp/banner_imgs`,
   filename: string | null = null,
   fileExt: FileTypes,
-) => {
-  if (fileExt === FileTypes.pdf) {
-    throw new Error(
-      "you cant use the file extension .pdf here. only .png and .jpeg are supported",
-    );
-  }
-  if (filename === null) {
-    const currentDate = new Date();
-    const isoString = currentDate.toISOString();
-    const cleanTime = isoString.split(".")[0];
-    const timestamp = cleanTime.replace(/:/g, "-");
+): Promise<string> => {
+  if (fileExt === FileTypes.pdf) throw new Error("PDF not allowed here");
 
-    filename = `${uuidv4()}_${timestamp}`;
-  }
+  const name = filename ?? `${uuidv4()}_${Date.now()}`;
+  const filepath = path.join(filepathBase, `${name}${fileExt}`);
 
-  const filepath = `${filepathBase}/${filename}${fileExt}`;
+  await fs.mkdir(filepathBase, { recursive: true });
   await fs.writeFile(filepath, Buffer.from(data));
-  console.log(`Saved to ${filepath}`);
+
   return filepath;
 };
 
-export const isFilepath = (s: string): boolean => {
-  return !s.startsWith("http");
+/* ---------------------------
+   FILE UTILS
+----------------------------*/
+export const fileHashExistsServer = async (
+  db: NodePgDatabase<any>,
+  fileHash: string,
+): Promise<boolean> => {
+  const cleanHash = String(fileHash).trim();
+
+  const result = await db
+    .select({ id: documentsTable.file_id })
+    .from(documentsTable)
+    .where(eq(documentsTable.fileHash, cleanHash))
+    .limit(1);
+
+  return result.length > 0;
 };
 
-export const sanitizeUrl = (url: string): string => {
-  // Remove all occurrences of "http://", "https://", "http//", "https//" at the start of the string
-  const cleaned = url.replace(/^(?:https?:\/\/?)+/gi, "");
-
-  // If "https" was present anywhere in the original prefix, prefer it
-  const isHttps = url.toLowerCase().includes("https");
-  const proto = isHttps ? "https://" : "http://";
-
-  return `${proto}${cleaned}`;
-};
-
-export async function deleteFileApi(serverPath: string) {
-  const url = sanitizeUrl(
-    `${process.env.BASE_SITE_URL}:3000/delete/consume?filepath=${encodeURIComponent(serverPath)}`,
-  );
-  const res = await fetch(url, { method: "delete" });
-}
-
-export async function downloadFile(
-  serverPath: string,
-  outputPath: string,
-  deleteAfterDown: boolean = false,
-) {
-  const url = sanitizeUrl(
-    `${process.env.BASE_SITE_URL}:3000/download/consume?filepath=${encodeURIComponent(serverPath)}`,
-  );
-  console.log(`Downloading from url: ${url}`);
-  const res = await fetch(url);
-
-  if (!res.ok) {
-    throw new Error(`Download failed: ${res.status} for URL ${url}`);
-  }
-
-  const buffer = Buffer.from(await res.arrayBuffer());
-
-  await fs.mkdir(path.dirname(outputPath), {
-    recursive: true,
-  });
-  await fs.writeFile(outputPath, buffer);
-  if (deleteAfterDown) {
-    await deleteFileApi(serverPath);
-  }
-  return outputPath;
-}
-
-export const toArrayBuffer = (buffer: Buffer): ArrayBuffer => {
-  const ab = new ArrayBuffer(buffer.byteLength);
-  new Uint8Array(ab).set(buffer);
-  return ab;
-};
-
-export async function uploadFiles(paths: string[] = []) {
-  const form = new FormData();
-
-  for (const filePath of paths) {
-    const buffer = await fs.readFile(filePath);
-
-    const uuid = path.basename(path.dirname(filePath));
-    const fileName = path.basename(filePath);
-
-    const file = new File([buffer], `${uuid}/${fileName}`);
-    form.append("file", file);
-  }
-
-  const url = sanitizeUrl(`${process.env.BASE_SITE_URL}:3000/upload/temp`);
-  const res = await fetch(url, {
+export const fileHashAlreadyExistingApi = async (
+  fileHash: string,
+): Promise<boolean> => {
+  const res = await fetch(`${process.env.BASE_SERVER_URL}/check/hash_exists`, {
+    headers: getAuthHeader(),
     method: "POST",
-    body: form,
+    body: JSON.stringify({ hash: fileHash }),
   });
 
   if (!res.ok) {
-    throw new Error(`Upload failed: ${res.status}`);
+    throw new Error(`Hash check API failed: ${res.status} ${res.statusText}`);
   }
+  const resJson = await res.json();
+  return resJson.exists;
+};
 
-  return await res.json();
+export async function hashFile(filepath: string): Promise<string> {
+  const fileHandle = await fs.open(filepath, "r");
+  try {
+    const buffer = Buffer.alloc(65536);
+    const { bytesRead } = await fileHandle.read(buffer, 0, 65536, 0);
+
+    const hash = crypto.createHash("sha256");
+    hash.update(buffer.subarray(0, bytesRead));
+    return hash.digest("hex");
+  } finally {
+    await fileHandle.close();
+  }
 }
 
+export const isFilepath = (s: string) => !s.startsWith("http");
+
+export const bufferToArrayBuffer = (buf: Buffer): ArrayBuffer =>
+  buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
 
 export const imgFilepathToArrayBuffer = async (
   filepath: string,
-): Promise<ArrayBuffer> => {
-  const buffer = await fs.readFile(filepath);
-  return buffer.buffer.slice(
-    buffer.byteOffset,
-    buffer.byteOffset + buffer.byteLength,
-  );
-};
-
-export const screenshotToImageLike = (s: Screenshot): ImageLike => {
-  if (s.data && s.data.length) return Buffer.from(s.data);
-
-  if (s.dataUrl && s.dataUrl.startsWith("data:")) {
-    return s.dataUrl;
-  }
-
-  if (s.dataUrl) {
-    return `data:image/png;base64,${s.dataUrl}`;
-  }
-
-  throw new Error("Screenshot missing usable data");
-};
+): Promise<ArrayBuffer> => bufferToArrayBuffer(await fs.readFile(filepath));

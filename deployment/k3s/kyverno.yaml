@@ -1,0 +1,37 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: inject-custom-ca-certs
+
+spec:
+  background: false
+
+  rules:
+    - name: mutate-pods-for-bun-ssl
+
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+
+      mutate:
+        patchStrategicMerge:
+          spec:
+            containers:
+              - (name): "*"
+
+                env:
+                  - name: NODE_EXTRA_CA_CERTS
+                    value: "/etc/ssl/custom-certs/rootCA.pem"
+
+                volumeMounts:
+                  - name: custom-ca-cert
+                    mountPath: /etc/ssl/custom-certs/rootCA.pem
+                    subPath: ca.crt
+                    readOnly: true
+
+            volumes:
+              - name: custom-ca-cert
+                secret:
+                  secretName: external-server-cert

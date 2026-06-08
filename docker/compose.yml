@@ -1,0 +1,100 @@
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "7001:80"
+      - "7443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../backend/certs:/etc/nginx/certs:ro
+      - ../frontend/dist:/usr/share/nginx/html:ro
+    depends_on:
+      - master
+      - volume
+      - filer
+      - s3
+    networks:
+      - dms-network
+
+  master:
+    image: chrislusf/seaweedfs
+    container_name: seaweed-master
+    command: "master -ip=master -ip.bind=0.0.0.0 -metricsPort=9324 -mdir=/data"
+    volumes:
+      - ./seaweed_master_data:/data
+    networks:
+      - dms-network
+
+  volume:
+    image: chrislusf/seaweedfs
+    container_name: seaweed-volume
+    command: 'volume -ip=volume -master="master:9333" -ip.bind=0.0.0.0 -port=8080 -metricsPort=9325 -dir=/data'
+    volumes:
+      - ./seaweed_volume_data:/data
+    depends_on:
+      - master
+    networks:
+      - dms-network
+
+  filer:
+    image: chrislusf/seaweedfs
+    container_name: seaweed-filer
+    command: 'filer -ip=filer -master="master:9333" -ip.bind=0.0.0.0 -metricsPort=9326'
+    tty: true
+    stdin_open: true
+    volumes:
+      - ./seaweed_filer_data:/data
+    depends_on:
+      - master
+      - volume
+    networks:
+      - dms-network
+
+  s3:
+    image: chrislusf/seaweedfs
+    container_name: seaweed-s3
+    ports:
+      - "8333:8333"
+      - "9327:9327"
+    environment:
+      - SEAWEEDFS_S3_KEY=${ACCESS_KEY_S3}
+      - SEAWEEDFS_S3_SECRET=${SECRET_KEY_S3}
+    command: 's3 -filer="filer:8888" -ip.bind=0.0.0.0 -metricsPort=9327 -allowEmptyFolder=true'
+    depends_on:
+      - master
+      - volume
+      - filer
+    networks:
+      - dms-network
+
+  rabbitmq:
+    container_name: rabbitmq
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - ./rabbitmq-data:/var/lib/rabbitmq
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro   
+    restart: unless-stopped
+    networks:
+      - dms-network
+
+  meilisearch:
+    image: getmeili/meilisearch:latest
+    container_name: meilisearch
+    ports:
+      - "7700:7700"
+    volumes:
+      - ./meili_data:/meili_data
+    environment:
+      - MEILI_ENV=development
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY}
+    restart: always
+    networks:
+      - dms-network
+
+networks:
+  dms-network:
+    driver: bridge

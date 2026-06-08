@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { SearchHit } from "../../types";
+import { useApp } from "../../lib/AppContext";
 import OcrOverlay from "./OcrOverlay";
 import styles from "./SearchResultCard.module.css";
 
@@ -29,10 +30,27 @@ export default function SearchResultCard({
   hit: SearchHit;
   query?: string;
 }) {
+  const { settings } = useApp();
   const [imgError, setImgError] = useState(false);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const filename = getFilename(hit.filepath);
   const snippet = getSnippet(hit);
+
+  // Rewrite banner_img to use the configured serverUrl if it's an absolute URL from another host
+  const getBannerUrl = (bannerUrl: string) => {
+    if (!bannerUrl) return "";
+    try {
+      const url = new URL(bannerUrl);
+      if (url.pathname.startsWith("/s3/")) {
+        return `${settings.serverUrl}${url.pathname}`;
+      }
+      return bannerUrl;
+    } catch {
+      return bannerUrl;
+    }
+  };
+
+  const finalBannerImg = getBannerUrl(hit.banner_img);
 
   return (
     <>
@@ -44,9 +62,9 @@ export default function SearchResultCard({
         onKeyDown={(e) => e.key === "Enter" && setOverlayOpen(true)}
       >
         <div className={styles.thumb}>
-          {hit.banner_img && !imgError ? (
+          {finalBannerImg && !imgError ? (
             <img
-              src={`${hit.banner_img}`}
+              src={finalBannerImg}
               alt={filename}
               onError={() => setImgError(true)}
               className={styles.thumbImg}

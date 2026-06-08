@@ -1,12 +1,14 @@
-import React, { useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import React, { useState, useEffect, useCallback } from "react";
+import { NavLink } from "react-router-dom";
 import { useApp } from "../../lib/AppContext";
+import SearchModal from "../search/SearchModal";
 import styles from "./Layout.module.css";
 
+// ── Icons ──────────────────────────────────────────────
 const HomeIcon = () => (
   <svg
-    width="18"
-    height="18"
+    width="16"
+    height="16"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -20,8 +22,8 @@ const HomeIcon = () => (
 );
 const SearchIcon = () => (
   <svg
-    width="18"
-    height="18"
+    width="16"
+    height="16"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -35,8 +37,8 @@ const SearchIcon = () => (
 );
 const UploadIcon = () => (
   <svg
-    width="18"
-    height="18"
+    width="16"
+    height="16"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -51,8 +53,8 @@ const UploadIcon = () => (
 );
 const SettingsIcon = () => (
   <svg
-    width="18"
-    height="18"
+    width="16"
+    height="16"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -66,8 +68,8 @@ const SettingsIcon = () => (
 );
 const DashboardIcon = () => (
   <svg
-    width="18"
-    height="18"
+    width="16"
+    height="16"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -83,8 +85,8 @@ const DashboardIcon = () => (
 );
 const MenuIcon = () => (
   <svg
-    width="20"
-    height="20"
+    width="16"
+    height="16"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -97,10 +99,56 @@ const MenuIcon = () => (
     <line x1="3" y1="18" x2="21" y2="18" />
   </svg>
 );
+const LogoutIcon = () => (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+    <polyline points="16 17 21 12 16 7" />
+    <line x1="21" y1="12" x2="9" y2="12" />
+  </svg>
+);
+const UserIcon = () => (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+    <circle cx="12" cy="7" r="4" />
+  </svg>
+);
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const { t } = useApp();
+  const { t, auth, logout } = useApp();
   const [collapsed, setCollapsed] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // CMD+K / Ctrl+K global shortcut
+  const openSearch = useCallback(() => setSearchOpen(true), []);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   const navItems = [
     { to: "/", label: t.nav.home, icon: <HomeIcon /> },
@@ -132,6 +180,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
+        {/* Global search trigger button in sidebar */}
+        <button
+          className={`${styles.searchTrigger} ${collapsed ? styles.searchTriggerCollapsed : ""}`}
+          onClick={openSearch}
+          title={`${t.nav.searchPlaceholder} (⌘K)`}
+        >
+          <span className={styles.searchTriggerIcon}>
+            <SearchIcon />
+          </span>
+          {!collapsed && (
+            <>
+              <span className={styles.searchTriggerText}>
+                {t.nav.searchPlaceholder}
+              </span>
+              <kbd className={styles.searchTriggerKbd}>⌘K</kbd>
+            </>
+          )}
+        </button>
+
         <nav className={styles.nav}>
           {navItems.map(({ to, label, icon }) => (
             <NavLink
@@ -149,33 +216,45 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className={styles.sidebarFooter}>
-          {!collapsed && (
-            <div className={styles.footerContent}>
-              <span className={styles.version}>v0.1.0</span>
-              <a
-                href="https://github.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.ossLink}
-                title="Open Source"
-              >
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
+          {auth && (
+            <div
+              className={`${styles.userRow} ${collapsed ? styles.userRowCollapsed : ""}`}
+            >
+              <div className={styles.userAvatar}>
+                <UserIcon />
+              </div>
+              {!collapsed && (
+                <>
+                  <span className={styles.userName} title={auth.username}>
+                    {auth.username}
+                  </span>
+                  <button
+                    className={styles.logoutBtn}
+                    onClick={logout}
+                    title={t.settings.logout}
+                  >
+                    <LogoutIcon />
+                  </button>
+                </>
+              )}
+              {collapsed && (
+                <button
+                  className={styles.logoutBtnCollapsed}
+                  onClick={logout}
+                  title={t.settings.logout}
                 >
-                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
-                </svg>
-                Open Source
-              </a>
+                  <LogoutIcon />
+                </button>
+              )}
             </div>
           )}
-          {collapsed && <span className={styles.version}>v0.1</span>}
+          {!collapsed && <span className={styles.version}>v0.1.0</span>}
         </div>
       </aside>
 
       <main className={styles.main}>{children}</main>
+
+      {searchOpen && <SearchModal onClose={() => setSearchOpen(false)} />}
     </div>
   );
 }

@@ -160,3 +160,133 @@
     display: none;
   }
 }
+
+/* ── User row (new) ── */
+.userRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-elevated);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  min-width: 0;
+}
+
+.userRowCollapsed {
+  flex-direction: column;
+  padding: 6px;
+  gap: 4px;
+}
+
+.userAvatar {
+  width: 24px;
+  height: 24px;
+  background: var(--accent-glow);
+  border: 1px solid var(--accent-dim);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.userName {
+  flex: 1;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logoutBtn {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: 4px;
+  transition:
+    color 0.15s,
+    background 0.15s;
+  flex-shrink: 0;
+}
+.logoutBtn:hover {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+}
+
+.logoutBtnCollapsed {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+.logoutBtnCollapsed:hover {
+  color: var(--red);
+}
+
+/* ── Search trigger button ────────────────────────────── */
+.searchTrigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 8px 4px;
+  padding: 8px 10px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-accent);
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+  width: calc(100% - 16px);
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    color 0.15s;
+  min-width: 0;
+}
+
+.searchTrigger:hover {
+  border-color: var(--accent-dim);
+  background: var(--accent-glow);
+  color: var(--text-secondary);
+}
+
+.searchTriggerCollapsed {
+  justify-content: center;
+  padding: 8px;
+  width: calc(100% - 16px);
+}
+
+.searchTriggerIcon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.searchTriggerText {
+  flex: 1;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.searchTriggerKbd {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  padding: 2px 5px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-accent);
+  border-radius: 4px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  user-select: none;
+}

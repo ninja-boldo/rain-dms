@@ -1,0 +1,105 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: keda-scaler-patcher
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: scaledobject-patcher
+rules:
+  - apiGroups: ["keda.sh"]
+    resources: ["scaledobjects"]
+    verbs: ["get", "patch"]
+  - apiGroups: [""]
+    resources: ["nodes", "pods"]
+    verbs: ["list", "get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: scaledobject-patcher
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: scaledobject-patcher
+subjects:
+  - kind: ServiceAccount
+    name: keda-scaler-patcher
+    namespace: default
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: keda-maxreplicas-sync
+  namespace: default
+spec:
+  schedule: "* * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: keda-scaler-patcher
+          restartPolicy: OnFailure
+          containers:
+            - name: patcher
+              image: bitnami/kubectl:latest
+              env:
+                - name: CPU_REQUEST_PER_POD
+                  value: "3500"  # millicores 
+              command:
+                - sh
+                - -c
+                - |
+                  TOTAL_MAX_REPLICAS=0
+
+                  for NODE in $(kubectl get nodes --no-headers \
+                      -o custom-columns='NAME:.metadata.name'); do
+
+                    # Skip unready nodes
+                    READY=$(kubectl get node "$NODE" \
+                      -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')
+                    [ "$READY" != "True" ] && continue
+
+                    # Allocatable CPU → millicores
+                    RAW=$(kubectl get node "$NODE" \
+                      -o jsonpath='{.status.allocatable.cpu}')
+                    if echo "$RAW" | grep -q 'm'; then
+                      ALLOC=$(echo "$RAW" | tr -d 'm')
+                    else
+                      ALLOC=$(($(echo "$RAW") * 1000))
+                    fi
+
+                    # Sum of all pod CPU requests on this node → millicores
+                    USED=$(kubectl get pods --all-namespaces \
+                      --field-selector "spec.nodeName=$NODE" \
+                      -o jsonpath='{range .items[*]}{range .spec.containers[*]}{.resources.requests.cpu}{"\n"}{end}{end}' \
+                      | awk '{
+                          v = $1
+                          if (v ~ /m$/) { sub(/m/, "", v); sum += v }
+                          else if (v != "") { sum += v * 1000 }
+                        } END { print sum+0 }')
+
+                    FREE=$((ALLOC - USED))
+                    [ $FREE -lt 0 ] && FREE=0
+                    
+                    # Calculate how many EXTRA pods this node can comfortably fit
+                    NODE_ALLOWED_PODS=$((FREE / CPU_REQUEST_PER_POD))
+                    
+                    # YOUR CRITICAL RULE: Every valid node gets AT LEAST 1 pod floor capacity
+                    if [ $NODE_ALLOWED_PODS -lt 1 ]; then
+                      NODE_ALLOWED_PODS=1
+                    fi
+
+                    echo "  $NODE: free=${FREE}m -> allowed_pods=${NODE_ALLOWED_PODS}"
+                    TOTAL_MAX_REPLICAS=$((TOTAL_MAX_REPLICAS + NODE_ALLOWED_PODS))
+                  done
+
+                  [ $TOTAL_MAX_REPLICAS -lt 1 ] && TOTAL_MAX_REPLICAS=1
+
+                  echo "Calculated maxReplicaCount across all nodes: $TOTAL_MAX_REPLICAS"
+                  kubectl patch scaledobject worker-app-scaledobject \
+                    --type=merge \
+                    -p "{\"spec\":{\"maxReplicaCount\":$TOTAL_MAX_REPLICAS}}"

@@ -3,13 +3,17 @@ export interface Document {
   created_at: string;
   assigned_tags: string[];
   banner_img: string;
+  page_count?: number;
 }
 
 export interface SearchHit {
-  id: number;
+  id: string;
+  file_id: number;
   filepath: string;
+  pageIdx: number;
   created_at: string;
   assigned_tags: string[];
+  searchable_text?: string;
   ocr: {
     lines: Array<{
       boxes: Array<{

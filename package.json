@@ -1,34 +1,60 @@
 {
   "name": "rain-dms",
   "scripts": {
-    "dev::backend": "cd backend && bun run dev",
+    "setup": "bash backend/certs/create_certs.sh",
+    "dev": "bun run setup && bun run dev::backend",
+    "dev::backend": "cd backend && bun run --env-file=../.env dev",
     "dev::backend::db": "cd backend && bunx drizzle-kit push",
-    "dev::frontend": "bun --cwd frontend run dev"
+    "dev::frontend": "cd frontend && bun run dev --host 0.0.0.0",
+    "dev::all": "bun run setup && concurrently \"ROOT_DIR=$(pwd) bun run dev::backend\" \"bun run dev::frontend\""
   },
   "dependencies": {
-    "@types/bun": "latest",
+    "@aws-sdk/client-s3": "^3.1063.0",
+    "@hono/standard-validator": "^0.2.2",
+    "@kreuzberg/node": "^4.9.8",
     "@types/pg": "^8.20.0",
+    "@valibot/to-json-schema": "^1.7.0",
     "amqplib": "^2.0.1",
-    "chokidar": "^5.0.0",
     "concurrently": "^9.2.1",
     "dotenv": "^17.4.2",
-    "drizzle-kit": "^0.31.10",
-    "drizzle-orm": "^0.45.2",
     "fdir": "^6.5.0",
-    "hono": "^4.12.18",
-    "meilisearch": "^0.58.0",
-    "move-file": "^4.1.0",
-    "node-poppler": "^9.1.2",
-    "onnxruntime-node": "^1.26.0",
-    "onnxruntime-web": "^1.26.0",
+    "hono-openapi": "^1.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "p-limit": "^7.3.0",
     "pg": "^8.20.0",
-    "ppu-paddle-ocr": "^5.4.1",
-    "react-dropzone": "^15.0.0",
-    "tesseract.js": "^7.0.0",
+    "sharp": "^0.34.5",
     "tsx": "^4.21.0",
-    "uuid": "^14.0.0"
+    "uuid": "^14.0.0",
+    "valibot": "^1.4.0"
   },
   "devDependencies": {
+    "@types/bun": "^1.3.14",
     "mitata": "^1.0.34"
-  }
+  },
+  "supportedArchitectures": {
+    "os": [
+      "current",
+      "linux",
+      "darwin"
+    ],
+    "cpu": [
+      "current",
+      "x64",
+      "arm64"
+    ],
+    "libc": [
+      "current",
+      "glibc",
+      "musl"
+    ]
+  },
+  "trustedDependencies": [
+    "@kreuzberg/node",
+    "esbuild",
+    "kreuzberg",
+    "onnxruntime-node",
+    "protobufjs",
+    "sharp",
+    "tesseract.js"
+  ]
 }
