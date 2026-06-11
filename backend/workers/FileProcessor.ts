@@ -75,7 +75,7 @@ export class FileProcessor {
     console.log(`[Processor] Downloading: ${s3Url} → ${localPath}`);
 
     try {
-      await downloadFileS3(this.s3, path.basename(s3Url), localPath);
+      await downloadFileS3(this.s3, s3Url, localPath);
     } catch (err) {
       const msg = (err as Error).message;
 
@@ -83,7 +83,7 @@ export class FileProcessor {
       if (/S3 GET failed: 4\d\d/.test(msg)) {
         throw new PermanentFailureError(`Bad S3 key, won't retry: ${msg}`);
       }
-      
+
       if (/S3 GET failed: 500/.test(msg)) {
         throw new PermanentFailureError(
           `S3 returned 500 for this key — file unrecoverable, dead-lettering: ${s3Url}`,

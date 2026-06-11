@@ -1,296 +1,334 @@
-import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { useApp } from "../lib/AppContext";
 import { useDocuments } from "../hooks/useApi";
 import DocumentCard from "../components/documents/DocumentCard";
-import type { CardDensity, HomeSort, HomeView } from "../lib/AppContext";
-import { Document } from "../types";
 import styles from "./Home.module.css";
+import type {
+  HomeView,
+  HomeSort,
+  HomePageSize,
+  CardDensity,
+} from "../lib/AppContext";
 
-const ChevLeft = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <polyline points="15 18 9 12 15 6" />
-  </svg>
-);
-const ChevRight = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <polyline points="9 18 15 12 9 6" />
-  </svg>
-);
-
-const DENSITY_MIN: Record<CardDensity, number> = { small: 110, medium: 170, large: 260 };
-const DENSITY_THUMB: Record<CardDensity, number> = { small: 70, medium: 130, large: 220 };
-
-const GridIcon = ({ active }: { active: boolean }) => (
-  <svg width="13" height="13" viewBox="0 0 12 12" fill="currentColor" opacity={active ? 1 : 0.45}>
-    <rect x="0" y="0" width="5" height="5" rx="1" />
-    <rect x="7" y="0" width="5" height="5" rx="1" />
-    <rect x="0" y="7" width="5" height="5" rx="1" />
-    <rect x="7" y="7" width="5" height="5" rx="1" />
-  </svg>
-);
-const ListIcon = ({ active }: { active: boolean }) => (
-  <svg width="13" height="13" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" opacity={active ? 1 : 0.45}>
-    <line x1="4" y1="2" x2="11" y2="2" />
-    <line x1="4" y1="6" x2="11" y2="6" />
-    <line x1="4" y1="10" x2="11" y2="10" />
-    <circle cx="1.5" cy="2" r="1" fill="currentColor" stroke="none" />
-    <circle cx="1.5" cy="6" r="1" fill="currentColor" stroke="none" />
-    <circle cx="1.5" cy="10" r="1" fill="currentColor" stroke="none" />
-  </svg>
-);
-
-function sortDocuments(docs: Document[], sort: HomeSort): Document[] {
-  const sorted = [...docs];
-  switch (sort) {
-    case "oldest":
-      return sorted.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-    case "newest":
-      return sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    case "pages_desc":
-      return sorted.sort((a, b) => (b.page_count ?? 0) - (a.page_count ?? 0));
-    case "pages_asc":
-      return sorted.sort((a, b) => (a.page_count ?? 0) - (b.page_count ?? 0));
-    default:
-      return sorted;
-  }
-}
-
-const SORT_LABELS: Record<HomeSort, string> = {
-  newest: "Neueste",
-  oldest: "Älteste",
-  pages_desc: "Meiste S.",
-  pages_asc: "Wenigste S.",
+const DENSITY_HEIGHTS: Record<CardDensity, number> = {
+  small: 100,
+  medium: 140,
+  large: 200,
 };
 
+const SortIcon = () => (
+  <svg
+    width="12"
+    height="12"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+  >
+    <line x1="8" y1="6" x2="21" y2="6" />
+    <line x1="8" y1="12" x2="21" y2="12" />
+    <line x1="8" y1="18" x2="21" y2="18" />
+    <line x1="3" y1="6" x2="3.01" y2="6" />
+    <line x1="3" y1="12" x2="3.01" y2="12" />
+    <line x1="3" y1="18" x2="3.01" y2="18" />
+  </svg>
+);
+
+const GridIcon = () => (
+  <svg
+    width="13"
+    height="13"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+  >
+    <rect x="3" y="3" width="7" height="7" />
+    <rect x="14" y="3" width="7" height="7" />
+    <rect x="3" y="14" width="7" height="7" />
+    <rect x="14" y="14" width="7" height="7" />
+  </svg>
+);
+
+const ListIcon = () => (
+  <svg
+    width="13"
+    height="13"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+  >
+    <line x1="8" y1="6" x2="21" y2="6" />
+    <line x1="8" y1="12" x2="21" y2="12" />
+    <line x1="8" y1="18" x2="21" y2="18" />
+    <line x1="3" y1="6" x2="3.01" y2="6" />
+    <line x1="3" y1="12" x2="3.01" y2="12" />
+    <line x1="3" y1="18" x2="3.01" y2="18" />
+  </svg>
+);
+
 export default function Home() {
-  const { language, settings, setSettings } = useApp();
-  const [pageIdx, setPageIdx] = useState(0);
+  const { t, language, settings, setSettings } = useApp();
+  const [page, setPage] = useState(0);
 
-  const pageSize = settings.homePageSize ?? 50;
-  const homeView = settings.homeView ?? "grid";
-  const homeSort = settings.homeSort ?? "newest";
-  const density: CardDensity = settings.cardDensity ?? "medium";
+  const view = settings.homeView;
 
-  const { data: rawData, setData, loading, error, hasMore, totalCount } =
-    useDocuments(pageIdx, pageSize);
+  // ── Vault-wide stats (total docs, pages, OCR coverage) ──
+  const [vaultStats, setVaultStats] = useState<{
+    total: number | null;
+    pages: number | null;
+    ocrPct: number | null;
+  }>({ total: null, pages: null, ocrPct: null });
 
-  const data = Array.isArray(rawData) ? rawData : [];
+  useEffect(() => {
+    fetch(`${settings.serverUrl}/stats`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => {
+        if (d) setVaultStats({
+          total: d.total_documents ?? null,
+          pages: d.total_pages ?? null,
+          ocrPct: d.ocr_coverage_pct ?? null,
+        });
+      })
+      .catch(() => null);
+  }, [settings.serverUrl]);
 
-  // Client-side sort + slice to page size
-  const displayData = useMemo(() => {
-    const sorted = sortDocuments(data, homeSort);
-    return sorted.slice(0, pageSize);
-  }, [data, homeSort, pageSize]);
 
-  const [locatedPath, setLocatedPath] = useState<string | null>(null);
-  const locatedRef = useRef<HTMLDivElement | null>(null);
-  const locateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sort = settings.homeSort;
+  const pageSize = settings.homePageSize;
+  const density = settings.cardDensity;
+
+  const {
+    data: rawDocs,
+    setData,
+    loading,
+    error,
+    hasMore,
+    totalCount,
+  } = useDocuments(page, pageSize);
+
+  const docs = [...rawDocs].sort((a, b) => {
+    if (sort === "newest")
+      return (
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    if (sort === "oldest")
+      return (
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+    if (sort === "pages_desc") return (b.page_count ?? 1) - (a.page_count ?? 1);
+    if (sort === "pages_asc") return (a.page_count ?? 1) - (b.page_count ?? 1);
+    return 0;
+  });
+
+  const setView = (v: HomeView) => setSettings({ ...settings, homeView: v });
+  const setSort = (s: HomeSort) => {
+    setSettings({ ...settings, homeSort: s });
+    setPage(0);
+  };
+  const setPageSize = (n: HomePageSize) => {
+    setSettings({ ...settings, homePageSize: n });
+    setPage(0);
+  };
+  const setDensity = (d: CardDensity) =>
+    setSettings({ ...settings, cardDensity: d });
 
   const handleDeleted = useCallback(
     (filepath: string) => {
-      setData((prev) => Array.isArray(prev) ? prev.filter((d) => d.filepath !== filepath) : []);
+      setData((prev) => prev.filter((d) => d.filepath !== filepath));
     },
     [setData],
   );
 
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const { filepath } = (e as CustomEvent).detail;
-      setLocatedPath(filepath);
-      if (locateTimer.current) clearTimeout(locateTimer.current);
-      locateTimer.current = setTimeout(() => setLocatedPath(null), 3500);
-    };
-    window.addEventListener("dms:locate", handler);
-    return () => window.removeEventListener("dms:locate", handler);
-  }, []);
+  const thumbH = DENSITY_HEIGHTS[density];
 
-  useEffect(() => {
-    if (locatedPath && locatedRef.current) {
-      locatedRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-  }, [locatedPath, displayData]);
-
-  const pageStart = pageIdx * pageSize + 1;
-  const pageEnd   = pageIdx * pageSize + displayData.length;
-  const minW      = DENSITY_MIN[density];
-  const thumbH    = DENSITY_THUMB[density];
-
-  const setView = (v: HomeView) => setSettings({ ...settings, homeView: v });
-  const setSort = (s: HomeSort) => setSettings({ ...settings, homeSort: s });
-  const setDensity = (d: CardDensity) => setSettings({ ...settings, cardDensity: d });
+  const sortLabels: Record<HomeSort, string> = {
+    newest: t.search.newest,
+    oldest: t.search.oldest,
+    pages_desc: "Seiten ↓",
+    pages_asc: "Seiten ↑",
+  };
 
   return (
-    <div className={styles.page}>
-      <header className={styles.header}>
-        <div>
-          <h1 className={styles.title}>Dokumentenarchiv</h1>
-          <p className={styles.subtitle}>
-            {!loading && displayData.length > 0 && (
-              <>{pageStart}–{pageEnd}{totalCount !== null ? ` von ${totalCount.toLocaleString("de-DE")}` : ""} Dokumenten</>
-            )}
-            {!loading && displayData.length === 0 && !error && "Keine Dokumente"}
-            {loading && "Lädt…"}
-            {error && "Fehler beim Laden"}
-          </p>
+    <div className={styles.root}>
+      {/* Header */}
+      <div className={styles.header}>
+        <div className={styles.titleGroup}>
+          <h1 className={styles.title}>{t.home.title}</h1>
+          {totalCount !== null && (
+            <span className={styles.totalBadge}>{totalCount}</span>
+          )}
         </div>
-
+        {/* ── Vault stats strip ── */}
+        {(vaultStats.total !== null || vaultStats.pages !== null) && (
+          <div className={styles.vaultStats}>
+            {vaultStats.total !== null && (
+              <span className={styles.vaultStat}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <strong>{vaultStats.total.toLocaleString()}</strong> documents
+              </span>
+            )}
+            {vaultStats.pages !== null && (
+              <span className={styles.vaultStat}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                <strong>{vaultStats.pages.toLocaleString()}</strong> pages
+              </span>
+            )}
+            {vaultStats.ocrPct !== null && (
+              <span className={styles.vaultStat}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                <strong>{vaultStats.ocrPct}%</strong> OCR
+              </span>
+            )}
+          </div>
+        )}
         <div className={styles.controls}>
-          {/* Sort selector */}
-          <div className={styles.sortGroup}>
-            {(["newest", "oldest", "pages_desc", "pages_asc"] as HomeSort[]).map((s) => (
+          {/* Sort */}
+          <div className={styles.controlGroup}>
+            <SortIcon />
+            {(
+              ["newest", "oldest", "pages_desc", "pages_asc"] as HomeSort[]
+            ).map((s) => (
               <button
                 key={s}
-                className={`${styles.sortBtn} ${homeSort === s ? styles.sortBtnActive : ""}`}
+                className={`${styles.chip} ${sort === s ? styles.chipActive : ""}`}
                 onClick={() => setSort(s)}
-                title={SORT_LABELS[s]}
               >
-                {SORT_LABELS[s]}
+                {sortLabels[s]}
               </button>
             ))}
           </div>
 
-          {/* View toggle */}
-          <div className={styles.viewGroup}>
-            <button
-              className={`${styles.viewBtn} ${homeView === "grid" ? styles.viewBtnActive : ""}`}
-              onClick={() => setView("grid")}
-              title="Rasteransicht"
-            >
-              <GridIcon active={homeView === "grid"} />
-            </button>
-            <button
-              className={`${styles.viewBtn} ${homeView === "list" ? styles.viewBtnActive : ""}`}
-              onClick={() => setView("list")}
-              title="Listenansicht"
-            >
-              <ListIcon active={homeView === "list"} />
-            </button>
+          {/* Page size */}
+          <div className={styles.controlGroup}>
+            {([25, 50, 100] as HomePageSize[]).map((n) => (
+              <button
+                key={n}
+                className={`${styles.chip} ${pageSize === n ? styles.chipActive : ""}`}
+                onClick={() => setPageSize(n)}
+              >
+                {n}
+              </button>
+            ))}
           </div>
 
-          {/* Density selector (grid only) */}
-          {homeView === "grid" && (
-            <div className={styles.densityGroup}>
+          {/* Density (grid only) */}
+          {view === "grid" && (
+            <div className={styles.controlGroup}>
               {(["small", "medium", "large"] as CardDensity[]).map((d) => (
                 <button
                   key={d}
-                  className={`${styles.densityBtn} ${density === d ? styles.densityBtnActive : ""}`}
+                  className={`${styles.chip} ${density === d ? styles.chipActive : ""}`}
                   onClick={() => setDensity(d)}
-                  title={d === "small" ? "Klein" : d === "medium" ? "Mittel" : "Groß"}
                 >
-                  <span className={styles.densityLabel}>
-                    {d === "small" ? "S" : d === "medium" ? "M" : "L"}
-                  </span>
+                  {d === "small" ? "S" : d === "medium" ? "M" : "L"}
                 </button>
               ))}
             </div>
           )}
 
-          {/* Pagination */}
-          <div className={styles.pagination}>
-            <button className={styles.pageBtn} disabled={pageIdx === 0}
-              onClick={() => { setPageIdx((p) => p - 1); window.scrollTo(0, 0); }}>
-              <ChevLeft />
+          {/* View toggle */}
+          <div className={styles.viewToggle}>
+            <button
+              className={`${styles.viewBtn} ${view === "grid" ? styles.viewBtnActive : ""}`}
+              onClick={() => setView("grid")}
+              title="Grid"
+            >
+              <GridIcon />
             </button>
-            <span className={styles.pageNum}>{pageIdx + 1}</span>
-            <button className={styles.pageBtn} disabled={!hasMore || !!error}
-              onClick={() => { setPageIdx((p) => p + 1); window.scrollTo(0, 0); }}>
-              <ChevRight />
+            <button
+              className={`${styles.viewBtn} ${view === "list" ? styles.viewBtnActive : ""}`}
+              onClick={() => setView("list")}
+              title="Liste"
+            >
+              <ListIcon />
             </button>
           </div>
         </div>
-      </header>
+      </div>
 
-      {error && (
-        <div className={styles.error}>
-          <span>Fehler: {error}</span>
-          <button className={styles.retryBtn} onClick={() => setPageIdx(pageIdx)}>
-            Wiederholen
-          </button>
+      {/* Content */}
+      {loading && (
+        <div
+          className={styles.loadingGrid}
+          style={{ gridTemplateColumns: view === "grid" ? undefined : "1fr" }}
+        >
+          {Array.from({ length: pageSize > 25 ? 12 : 8 }).map((_, i) => (
+            <div
+              key={i}
+              className={styles.skeleton}
+              style={view === "grid" ? { height: thumbH + 60 } : { height: 60 }}
+            />
+          ))}
         </div>
       )}
 
-      {loading ? (
-        homeView === "list" ? (
-          <div className={styles.listContainer}>
-            {Array.from({ length: 12 }).map((_, i) => (
-              <div key={i} className={styles.listSkeleton} style={{ animationDelay: `${i * 30}ms` }} />
+      {error && <div className={styles.errorBox}>{error}</div>}
+
+      {!loading && !error && docs.length === 0 && (
+        <div className={styles.empty}>
+          <p>{t.home.noDocuments}</p>
+        </div>
+      )}
+
+      {!loading &&
+        docs.length > 0 &&
+        (view === "grid" ? (
+          <div className={styles.grid}>
+            {docs.map((doc) => (
+              <DocumentCard
+                key={doc.filepath}
+                doc={doc}
+                lang={language}
+                thumbHeight={thumbH}
+                onDeleted={handleDeleted}
+                viewMode="grid"
+              />
             ))}
           </div>
         ) : (
-          <div
-            className={styles.grid}
-            style={{ "--card-min": `${minW}px`, "--thumb-h": `${thumbH}px` } as React.CSSProperties}
-          >
-            {Array.from({ length: 20 }).map((_, i) => (
-              <div key={i} className={styles.skeleton} style={{ animationDelay: `${i * 35}ms` }} />
+          <div className={styles.list}>
+            {docs.map((doc) => (
+              <DocumentCard
+                key={doc.filepath}
+                doc={doc}
+                lang={language}
+                onDeleted={handleDeleted}
+                viewMode="list"
+              />
             ))}
           </div>
-        )
-      ) : displayData.length === 0 ? (
-        <div className={styles.empty}>
-          <p>{error ? "Bitte überprüfe deine Anmeldung (401 Unauthorized)." : "Keine Dokumente vorhanden"}</p>
-        </div>
-      ) : homeView === "list" ? (
-        <div className={styles.listContainer}>
-          {displayData.map((doc, i) => {
-            const isLocated = locatedPath === doc.filepath;
-            return (
-              <div key={doc.filepath} style={{ position: "relative" }} ref={isLocated ? locatedRef : null}>
-                {isLocated && (
-                  <div className={styles.locateArrow}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                      <line x1="12" y1="5" x2="12" y2="19" />
-                      <polyline points="19 12 12 19 5 12" />
-                    </svg>
-                  </div>
-                )}
-                <DocumentCard
-                  doc={doc}
-                  lang={language}
-                  viewMode="list"
-                  style={{
-                    animationDelay: `${i * 20}ms`,
-                    ...(isLocated ? { borderColor: "var(--accent)", boxShadow: "0 0 0 2px var(--accent-dim)" } : {}),
-                  }}
-                  onDeleted={handleDeleted}
-                />
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div
-          className={styles.grid}
-          style={{ "--card-min": `${minW}px`, "--thumb-h": `${thumbH}px` } as React.CSSProperties}
-        >
-          {displayData.map((doc, i) => {
-            const isLocated = locatedPath === doc.filepath;
-            return (
-              <div key={doc.filepath} style={{ position: "relative" }} ref={isLocated ? locatedRef : null}>
-                {isLocated && (
-                  <div className={styles.locateArrow}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                      <line x1="12" y1="5" x2="12" y2="19" />
-                      <polyline points="19 12 12 19 5 12" />
-                    </svg>
-                  </div>
-                )}
-                <DocumentCard
-                  doc={doc}
-                  lang={language}
-                  thumbHeight={thumbH}
-                  viewMode="grid"
-                  style={{
-                    animationDelay: `${i * 25}ms`,
-                    ...(isLocated ? { borderColor: "var(--accent)", boxShadow: "0 0 0 2px var(--accent-dim), var(--shadow-md)" } : {}),
-                  }}
-                  onDeleted={handleDeleted}
-                />
-              </div>
-            );
-          })}
-        </div>
-      )}
+        ))}
+
+      {/* Pagination */}
+      {!loading &&
+        (totalCount !== null ? docs.length > 0 : docs.length > 0) && (
+          <div className={styles.pagination}>
+            <button
+              className={styles.pageBtn}
+              disabled={page === 0}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+            >
+              ← {t.home.page === "Seite" ? "Zurück" : "Back"}
+            </button>
+            <span className={styles.pageInfo}>
+              {t.home.page} {page + 1}
+              {totalCount !== null &&
+                ` ${t.home.of} ${Math.ceil(totalCount / pageSize)}`}
+            </span>
+            <button
+              className={styles.pageBtn}
+              disabled={!hasMore}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              {t.home.loadMore} →
+            </button>
+          </div>
+        )}
     </div>
   );
 }

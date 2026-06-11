@@ -48,7 +48,7 @@ spec:
               image: bitnami/kubectl:latest
               env:
                 - name: CPU_REQUEST_PER_POD
-                  value: "3500"  # millicores 
+                  value: "3500" # millicores
               command:
                 - sh
                 - -c

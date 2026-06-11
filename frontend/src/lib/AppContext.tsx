@@ -6,12 +6,12 @@ import {
   useCallback,
   ReactNode,
 } from "react";
-import { Theme, Language } from "../types";
+import { Theme, Language, ColorTheme } from "../types";
 import { translations } from "../i18n/translations";
 
 const BUILTIN_SERVER_URL =
   (import.meta.env.VITE_SERVER_URL as string | undefined) ??
-  "https://192.168.1.163:7443";
+  window.location.origin;
 
 export type CardDensity = "small" | "medium" | "large";
 export type HomeView = "grid" | "list";
@@ -35,6 +35,8 @@ interface AuthState {
 interface AppContextValue {
   theme: Theme;
   setTheme: (t: Theme) => void;
+  colorTheme: ColorTheme;
+  setColorTheme: (c: ColorTheme) => void;
   language: Language;
   setLanguage: (l: Language) => void;
   t: typeof translations.de;
@@ -91,6 +93,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return (localStorage.getItem("rain-dms-theme") as Theme) ?? "dark";
   });
 
+  const [colorTheme, setColorThemeState] = useState<ColorTheme>(() => {
+    return (localStorage.getItem("rain-dms-color") as ColorTheme) ?? "violet";
+  });
+
   const [language, setLanguageState] = useState<Language>(() => {
     return (localStorage.getItem("rain-dms-lang") as Language) ?? "de";
   });
@@ -121,7 +127,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .then((reg) => {
         const activate = async () => {
           const sw = reg.active;
-          if (!sw) { if (isMounted) setSwReady(true); return; }
+          if (!sw) {
+            if (isMounted) setSwReady(true);
+            return;
+          }
           const stored = localStorage.getItem("rain-dms-auth");
           if (stored) {
             const { token, username } = JSON.parse(stored);
@@ -132,7 +141,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             if (event.data?.type === "PONG" && isMounted) setSwReady(true);
           };
           sw.postMessage({ type: "PING" }, [channel.port2]);
-          setTimeout(() => { if (isMounted) setSwReady(true); }, 1000);
+          setTimeout(() => {
+            if (isMounted) setSwReady(true);
+          }, 1000);
         };
 
         if (reg.active) {
@@ -152,13 +163,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (isMounted) setSwReady(true);
       });
 
-    const timeout = setTimeout(() => { if (isMounted) setSwReady(true); }, 2000);
-    return () => { isMounted = false; clearTimeout(timeout); };
+    const timeout = setTimeout(() => {
+      if (isMounted) setSwReady(true);
+    }, 2000);
+    return () => {
+      isMounted = false;
+      clearTimeout(timeout);
+    };
   }, []);
 
   const setTheme = (t: Theme) => {
     setThemeState(t);
     localStorage.setItem("rain-dms-theme", t);
+  };
+
+  const setColorTheme = (c: ColorTheme) => {
+    setColorThemeState(c);
+    localStorage.setItem("rain-dms-color", c);
   };
 
   const setLanguage = (l: Language) => {
@@ -205,16 +226,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
+  useEffect(() => {
+    if (colorTheme === "violet") {
+      document.documentElement.removeAttribute("data-color");
+    } else {
+      document.documentElement.setAttribute("data-color", colorTheme);
+    }
+  }, [colorTheme]);
+
   const t = translations[language];
   if (!swReady) return null;
 
   return (
     <AppContext.Provider
       value={{
-        theme, setTheme,
-        language, setLanguage,
-        t, settings, setSettings, resetServerUrl,
-        auth, login, logout, getAuthHeaders,
+        theme,
+        setTheme,
+        colorTheme,
+        setColorTheme,
+        language,
+        setLanguage,
+        t,
+        settings,
+        setSettings,
+        resetServerUrl,
+        auth,
+        login,
+        logout,
+        getAuthHeaders,
       }}
     >
       {children}

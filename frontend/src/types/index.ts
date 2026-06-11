@@ -40,3 +40,4 @@ export interface SearchResponse {
 
 export type Theme = "light" | "dark";
 export type Language = "de" | "en";
+export type ColorTheme = "violet" | "blue" | "teal" | "rose" | "orange" | "forest";

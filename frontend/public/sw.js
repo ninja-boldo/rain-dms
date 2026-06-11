@@ -1,11 +1,8 @@
 /**
- * rain.dms service worker — v1.4.0
+ * rain.dms service worker — v1.5.0
  * Injects Authorization + X-Username on all authenticated backend paths.
  */
-
-/// <reference lib="webworker" />
-
-const SW_VERSION = "1.4.0";
+const SW_VERSION = "1.5.0";
 
 let authToken = null;
 let authUsername = null;
@@ -23,61 +20,58 @@ self.addEventListener("message", (event) => {
   }
 });
 
-self.addEventListener("install", () => {
-  self.skipWaiting();
-});
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
-self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
-});
+const PUBLIC_PATHS = new Set([
+  "/auth/signin",
+  "/auth/signup",
+  "/auth/validate-jwt",
+  "/stats",
+  "/worker-download-stats",
+]);
+
+const BACKEND_PREFIXES = [
+  "/s3/",
+  "/auth/",
+  "/main_page",
+  "/search",
+  "/pages",
+  "/upload",
+  "/download",
+  "/delete/",
+  "/stats",
+  "/workers",
+  "/dashboard",
+  "/queue-peek",
+  "/worker-download-stats",
+  "/tags",
+  "/document",
+  "/check/",
+];
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
+  const path = url.pathname;
 
-  // Only intercept same-origin backend paths
-  const isS3Path = url.pathname.startsWith("/s3/");
-
-  const isBackendPath =
-    url.pathname.startsWith("/auth/") ||
-    isS3Path ||
-    url.pathname.startsWith("/main_page") ||
-    url.pathname.startsWith("/search") ||
-    url.pathname.startsWith("/pages") ||
-    url.pathname.startsWith("/upload/") ||
-    url.pathname.startsWith("/download/") ||
-    url.pathname.startsWith("/delete/") ||
-    url.pathname.startsWith("/stats") ||
-    url.pathname.startsWith("/workers") ||
-    url.pathname.startsWith("/queue-peek") ||
-    url.pathname.startsWith("/worker-download-stats");
-
-  if (!isBackendPath) return;
-
-  const publicPaths = [
-    "/auth/signin",
-    "/auth/signup",
-    "/auth/validate-jwt",
-    "/stats",
-    "/worker-download-stats",
-  ];
-  if (publicPaths.some((p) => url.pathname === p)) return;
+  const isBackend = BACKEND_PREFIXES.some((p) => path.startsWith(p));
+  if (!isBackend) return;
+  if (PUBLIC_PATHS.has(path)) return;
   if (!authToken) return;
 
   event.respondWith(
     (async () => {
-      const originalHeaders = new Headers(event.request.headers);
-      originalHeaders.set("Authorization", authToken);
-      originalHeaders.set("username", authUsername ?? "");
-      originalHeaders.set("X-Username", authUsername ?? ""); // both casings for compat
+      const headers = new Headers(event.request.headers);
+      headers.set("x-auth-token", authToken);
+      headers.set("Authorization", authToken);
+      headers.set("username", authUsername ?? "");
+      headers.set("X-Username", authUsername ?? "");
 
-      // Upgrade no-cors → cors so custom headers are allowed on image requests
-      const targetMode =
-        event.request.mode === "no-cors" ? "cors" : event.request.mode;
-
-      const requestInit = {
-        headers: originalHeaders,
+      const mode = event.request.mode === "no-cors" ? "cors" : event.request.mode;
+      const init = {
+        headers,
         method: event.request.method,
-        mode: targetMode,
+        mode,
         credentials: event.request.credentials,
         cache: event.request.cache,
         redirect: event.request.redirect,
@@ -87,13 +81,11 @@ self.addEventListener("fetch", (event) => {
         keepalive: event.request.keepalive,
         signal: event.request.signal,
       };
-
       if (!["GET", "HEAD"].includes(event.request.method)) {
-        requestInit.body = event.request.body;
-        requestInit.duplex = event.request.duplex ?? "half";
+        init.body = event.request.body;
+        init.duplex = event.request.duplex ?? "half";
       }
-
-      return fetch(new Request(event.request.url, requestInit));
+      return fetch(new Request(event.request.url, init));
     })(),
   );
 });

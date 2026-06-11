@@ -17,8 +17,12 @@ metadata:
 spec:
   scaleTargetRef:
     name: queue-processor
+
   minReplicaCount: 1
-  maxReplicaCount: 1  # patched every minute by scaler-sync.yaml
+
+  # patched dynamically by your scaler-sync job
+  maxReplicaCount: 1
+
   triggers:
     - type: rabbitmq
       metadata:
@@ -38,45 +42,88 @@ metadata:
     app: queue-processor
 spec:
   replicas: 1
+
   selector:
     matchLabels:
       app: queue-processor
+
   template:
     metadata:
       labels:
         app: queue-processor
+
     spec:
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: ScheduleAnyway  
+          whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:
               app: queue-processor
+
       initContainers:
         - name: init-wait-for-rabbitmq
-          image: busybox
+          image: busybox:1.36
           command:
             - sh
             - -c
-            - 'until nc -z 192.168.1.163 5672; do echo "waiting for rabbitmq"; sleep 2; done;'
+            - >
+              until nc -z 192.168.1.163 5672;
+              do
+                echo "waiting for rabbitmq";
+                sleep 2;
+              done;
+
       containers:
         - name: worker-app
           image: boldo42/rain-dms-ocr-worker:latest
           imagePullPolicy: Always
+
+          securityContext:
+            allowPrivilegeEscalation: false
+
           env:
             - name: REQUESTS_CA_BUNDLE
               value: /usr/local/share/ca-certificates/ext-ca.crt
-            - name: OPENBLAS_CORETYPE
-              value: Haswell
+
+            # allocator tuning
+            - name: MALLOC_ARENA_MAX
+              value: "2"
+
+            # OpenMP affinity
+            - name: OMP_PROC_BIND
+              value: "TRUE"
+
+            - name: OMP_PLACES
+              value: "cores"
+
           envFrom:
             - secretRef:
                 name: app-env
+
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+
+            limits:
+              cpu: "8"
+              memory: 4Gi
+
           volumeMounts:
             - name: cert-vol
               mountPath: /usr/local/share/ca-certificates/ext-ca.crt
               subPath: ext-ca.crt
+
+            - name: dev-dri
+              mountPath: /dev/dri
+
       volumes:
         - name: cert-vol
           secret:
             secretName: external-server-cert
+
+        - name: dev-dri
+          hostPath:
+            path: /dev/dri
+            type: Directory

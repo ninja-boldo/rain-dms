@@ -9,16 +9,17 @@ import { uploadManyS3, pdfToImgPages, imgToWebp, hashFile } from "./utils";
 import "dotenv/config";
 import { S3Client } from "@aws-sdk/client-s3";
 
+// ─── Constants (Optimized for CPU) ───────────────────────────────────────────
 const MAX_WORKERS = process.env.MAX_WORKERS
   ? parseInt(process.env.MAX_WORKERS)
-  : 1;
-const CORE_FACTOR = 0.5;
-const factoredCoreCount = Math.round(os.cpus().length * CORE_FACTOR);
-const WORKER_COUNT = Math.max(1, Math.min(MAX_WORKERS, factoredCoreCount));
-const WEBP_CONCURRENCY = Math.min(2, os.cpus().length);
-const PDF_DPI = 100;
+  : os.cpus().length - 1;
+const WORKER_COUNT = Math.max(1, MAX_WORKERS); // Use all cores (minus 1 for I/O)
+const WEBP_CONCURRENCY = Math.min(4, os.cpus().length); // Increased from 2
+const PDF_DPI = 115;
 const webpLimit = pLimit(WEBP_CONCURRENCY);
+const BATCH_SIZE = 4; // Batch 4 images per OCR call
 
+// ─── Worker Pool ────────────────────────────────────────────────────────────
 interface PendingOcr {
   resolve: (results: any[]) => void;
   reject: (err: Error) => void;
@@ -113,14 +114,15 @@ class OcrWorkerPool {
 
   async runAll(paths: string[]): Promise<any[]> {
     if (paths.length === 0) return [];
-    const activeCount = Math.min(this.workers.length, paths.length);
-    const chunkSize = Math.ceil(paths.length / activeCount);
-
-    const chunkPromises = Array.from({ length: activeCount }, (_, i) => {
-      const chunk = paths.slice(i * chunkSize, (i + 1) * chunkSize);
-      return this.workers[i].run(chunk);
-    });
-
+    // Split into batches for each worker
+    const batches = Array.from(
+      { length: Math.ceil(paths.length / BATCH_SIZE) },
+      (_, i) => paths.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE),
+    );
+    // Distribute batches across workers
+    const chunkPromises = batches.map((batch, i) =>
+      this.workers[i % this.workers.length].run(batch),
+    );
     return (await Promise.all(chunkPromises)).flat();
   }
 
@@ -129,6 +131,7 @@ class OcrWorkerPool {
   }
 }
 
+// ─── Main OCR Class ─────────────────────────────────────────────────────────
 export class PaddleJsOcr {
   private readonly tempFolder: string;
   private readonly pool: OcrWorkerPool;
@@ -209,12 +212,12 @@ export class PaddleJsOcr {
     try {
       const pipelineStart = performance.now();
 
-      const rawResults = await this.pool.runAll(jpgPaths);
-      const webpUploadPromise = Promise.all(
-        jpgPaths.map((p) => webpLimit(() => imgToWebp(p, true))),
-      ).then((webpPaths) => uploadManyS3(s3, webpPaths, true));
-
-      const finalPageUrls = await webpUploadPromise;
+      // --- OCR + WebP Upload in Parallel ---
+      const [rawResults, webpPaths] = await Promise.all([
+        this.pool.runAll(jpgPaths),
+        Promise.all(jpgPaths.map((p) => webpLimit(() => imgToWebp(p, true)))),
+      ]);
+      const finalPageUrls = await uploadManyS3(s3, webpPaths, true);
       const pipelineMs = performance.now() - pipelineStart;
 
       const pages: PageOcr[] = rawResults.map((rawRes, idx) =>
@@ -249,10 +252,8 @@ export class PaddleJsOcr {
     bannerImgpath: string,
   ): PageOcr {
     const rawElements: any[] = rawRes?.ocrElements ?? rawRes?.elements ?? [];
-
     const lines: LineOcr[] = rawElements.map((el): LineOcr => {
       const points: number[][] = el.geometry?.points ?? [];
-
       let minX = 0,
         minY = 0,
         maxX = 0,
@@ -265,7 +266,6 @@ export class PaddleJsOcr {
         minY = Math.min(...ys);
         maxY = Math.max(...ys);
       }
-
       return {
         boxes: [
           {
@@ -279,7 +279,6 @@ export class PaddleJsOcr {
         ],
       };
     });
-
     return { pageNumber, lines, bannerImgpath };
   }
 }
