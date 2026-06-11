@@ -39,7 +39,7 @@ export function isValidSecretToken(
     try {
       if (secret) {
         jwt.verify(token, secret);
-        console.log("[isValidSecretToken] ✅ Token verified successfully");
+        //console.log("[isValidSecretToken] ✅ Token verified successfully");
         return true;
       }
     } catch (err: any) {

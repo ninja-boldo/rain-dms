@@ -14,11 +14,14 @@ import {
 import path from "path";
 import { Poppler } from "node-poppler";
 import "dotenv/config";
-import { S3Client, PutObjectCommand, CreateBucketCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  CreateBucketCommand,
+  GetObjectCommand,
+} from "@aws-sdk/client-s3";
 import { createWriteStream } from "fs";
 import { pipeline } from "stream/promises";
-
-
 
 const crypto = require("crypto");
 import { sign } from "jsonwebtoken";
@@ -98,7 +101,7 @@ export function getAuthHeader(): Headers {
 export const imgToWebp = async (
   origFilepath: string,
   inplace: boolean = true,
-  quality: number = 70,
+  quality: number = 90,
 ): Promise<string> => {
   const newFilename = `${getFilename(origFilepath)}.webp`;
   const newPath = changeFilenameForPath(origFilepath, newFilename);
@@ -150,7 +153,7 @@ async function renderPdfChunk(
 export const pdfToImgPages = async function (
   filePath: string,
   baseTempDir: string,
-  dpi: number = 150,
+  dpi: number = 100,
 ): Promise<string[]> {
   if (!filePath) throw new Error("ArgumentError: File path is required.");
 
@@ -204,23 +207,38 @@ export const pdfToImgPages = async function (
 /* ---------------------------
    FILENAME FORMATTING
 ----------------------------*/
+export const formatFilename = (
+  filepath: string,
+  basePathToRemove?: string | null | undefined,
+): string => {
+  const key =
+    basePathToRemove && filepath.startsWith(basePathToRemove)
+      ? filepath.slice(basePathToRemove.length)
+      : filepath;
 
-export const formatFilename = async (filepath: string): Promise<string> => {
-  const ext = getExtension(filepath);
-  const name = getFilename(filepath);
+  const { dir, name, ext } = path.parse(key);
 
   const suffix = `-${uuidv4()}-${new Date().toISOString().replace(/:/g, "-")}`;
-  const suffixBytes = Buffer.byteLength(suffix + "." + ext, "utf8");
-  const allowedNameBytes = 200 - suffixBytes;
+  const prefix = dir ? `${dir}/` : "";
+
+  const allowedBytes = 1024 - Buffer.byteLength(prefix + suffix + ext, "utf8");
 
   let truncated = name;
-  while (Buffer.byteLength(truncated, "utf8") > allowedNameBytes) {
+
+  while (Buffer.byteLength(truncated, "utf8") > allowedBytes) {
     truncated = [...truncated].slice(0, -1).join("");
   }
 
-  return `${truncated}${suffix}.${ext}`;
+  return `${prefix}${truncated}${suffix}${ext}`;
 };
 
+export function prependImgKey(imgKey: string): string {
+  const s3Prepend = "/s3/";
+  if (!imgKey.startsWith(s3Prepend)) {
+    return `${s3Prepend}${imgKey}`;
+  }
+  return imgKey;
+}
 /* ---------------------------
    PATH SANITIZER
 ----------------------------*/
@@ -367,13 +385,32 @@ export function getS3Client(): S3Client {
       secretAccessKey: process.env.S3_SECRET_KEY ?? "rain-dms",
     },
   });
+  console.warn(
+    "using this s3 endpoint url: ",
+    process.env.S3_ENDPOINT!.replace(/\/$/, ""),
+  );
 
   client.middlewareStack.add(
     (next) => async (args) => {
       const req = args.request as any;
+
+      // Inject auth headers
       getAuthHeader().forEach((value, key) => {
         req.headers[key] = value;
       });
+
+      if (process.env.S3_VERBOSE === "true") {
+        console.log("[S3_REQUEST]");
+        console.log("  → method:", req.method);
+        console.log("  → protocol:", req.protocol);
+        console.log("  → hostname:", req.hostname);
+        console.log("  → path:", req.path);
+
+        // full reconstructed URL (best-effort)
+        const url = `${req.protocol}//${req.hostname}${req.path}`;
+        console.log("  → url:", url);
+      }
+
       return next(args);
     },
     { step: "finalizeRequest", priority: "low", name: "authHeaderMiddleware" },
@@ -386,17 +423,82 @@ export const uploadGenericS3 = async (
   client: S3Client,
   bucket: string,
   objectKey: string,
-  fileBuffer: Buffer,
+  fileData: any,
   mimeType?: string,
+  verbose: boolean = true,
 ): Promise<void> => {
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: objectKey,
-      Body: fileBuffer,
-      ...(mimeType && { ContentType: mimeType }),
-    }),
-  );
+  if (!fileData) {
+    throw new Error(`[S3_UPLOAD_ERROR] No file data provided.`);
+  }
+
+  let binaryPayload: Uint8Array;
+
+  if (fileData instanceof Uint8Array) {
+    binaryPayload = fileData;
+  } else if (fileData instanceof ArrayBuffer) {
+    binaryPayload = new Uint8Array(fileData);
+  } else if (Buffer.isBuffer(fileData)) {
+    binaryPayload = new Uint8Array(fileData);
+  } else if (
+    fileData &&
+    typeof fileData === "object" &&
+    fileData.buffer instanceof ArrayBuffer
+  ) {
+    binaryPayload = new Uint8Array(
+      fileData.buffer,
+      fileData.byteOffset,
+      fileData.byteLength,
+    );
+  } else {
+    throw new Error(
+      `[S3_UPLOAD_ERROR] Unsupported data type. Must be Buffer, ArrayBuffer, or Uint8Array. Got: ${fileData?.constructor?.name}`,
+    );
+  }
+
+  const byteLength = binaryPayload.byteLength;
+
+  if (byteLength === 0) {
+    throw new Error(
+      `[S3_UPLOAD_ERROR] Refusing to upload 0-byte ghost file for key: "${objectKey}"`,
+    );
+  }
+
+  const startTime = performance.now();
+  const sizeMb = (byteLength / (1024 * 1024)).toFixed(2);
+
+  if (verbose) {
+    console.log(`[S3_UPLOAD_START]`);
+    console.log(`  → Bucket : ${bucket}`);
+    console.log(`  → Key    : ${objectKey}`);
+    console.log(`  → Size   : ${sizeMb} MB`);
+    console.log(`  → Type   : ${mimeType ?? "unknown"}`);
+  }
+
+  try {
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: objectKey,
+        Body: binaryPayload,
+        ContentLength: byteLength,
+        ...(mimeType && { ContentType: mimeType }),
+      }),
+    );
+
+    const duration = (performance.now() - startTime) / 1000;
+    const speed = (parseFloat(sizeMb) / duration).toFixed(2);
+
+    if (verbose) {
+      console.log(`[S3_UPLOAD_SUCCESS]`);
+      console.log(`  → Key    : ${objectKey}`);
+      console.log(`  → Time   : ${duration.toFixed(3)}s`);
+      console.log(`  → Speed  : ${speed} MB/s`);
+    }
+  } catch (error: any) {
+    console.error(`[S3_UPLOAD_FAILED] ${objectKey}`);
+    console.error(error?.message ?? error);
+    throw error;
+  }
 };
 
 export async function uploadManyS3(
@@ -427,7 +529,10 @@ export const initBuckets = async (client: S3Client): Promise<void> => {
       try {
         await client.send(new CreateBucketCommand({ Bucket: bucket }));
       } catch (err: any) {
-        if (err?.name !== "BucketAlreadyExists" && err?.name !== "BucketAlreadyOwnedByYou") {
+        if (
+          err?.name !== "BucketAlreadyExists" &&
+          err?.name !== "BucketAlreadyOwnedByYou"
+        ) {
           throw err;
         }
       }
@@ -511,11 +616,14 @@ export const fileHashAlreadyExistingApi = async (
   return resJson.exists;
 };
 
-export async function hashFile(filepath: string): Promise<string> {
+export async function hashFile(
+  filepath: string,
+  bytesToHash: number = 16777216,
+): Promise<string> {
   const fileHandle = await fs.open(filepath, "r");
   try {
-    const buffer = Buffer.alloc(65536);
-    const { bytesRead } = await fileHandle.read(buffer, 0, 65536, 0);
+    const buffer = Buffer.alloc(bytesToHash);
+    const { bytesRead } = await fileHandle.read(buffer, 0, bytesToHash, 0);
 
     const hash = crypto.createHash("sha256");
     hash.update(buffer.subarray(0, bytesRead));

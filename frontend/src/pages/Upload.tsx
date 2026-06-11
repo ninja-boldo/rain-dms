@@ -1,282 +1,278 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useCallback } from "react";
 import { useApp } from "../lib/AppContext";
+import Dropzone from "../components/upload/Dropzone";
 import styles from "./Upload.module.css";
 
-type Status = "idle" | "uploading" | "success" | "error";
+interface UploadResult {
+  filename: string;
+  ok: boolean;
+  error?: string;
+}
 
-const ALLOWED_TYPES = [
-  "application/pdf",
-  "image/png",
-  "image/jpeg",
-  "image/jpg",
-  "image/webp",
-];
-const ALLOWED_EXT = /\.(pdf|png|jpg|jpeg|webp)$/i;
+// A File that may carry webkitRelativePath
+type RichFile = File & { webkitRelativePath?: string };
 
-function isAllowedFile(f: File): boolean {
-  return ALLOWED_TYPES.includes(f.type) || ALLOWED_EXT.test(f.name);
+function getRelativeDir(file: RichFile): string | null {
+  const rel = file.webkitRelativePath;
+  if (!rel) return null;
+  const parts = rel.split("/");
+  return parts.length > 2 ? parts.slice(0, -1).join("/") : parts[0];
+}
+
+function groupByFolder(files: RichFile[]): Record<string, RichFile[]> {
+  const map: Record<string, RichFile[]> = {};
+  for (const f of files) {
+    const dir = getRelativeDir(f) ?? "";
+    if (!map[dir]) map[dir] = [];
+    map[dir].push(f);
+  }
+  return map;
 }
 
 export default function Upload() {
   const { t, settings, getAuthHeaders } = useApp();
-  const [files, setFiles] = useState<File[]>([]);
-  const [status, setStatus] = useState<Status>("idle");
-  const [message, setMessage] = useState("");
-  const [mode, setMode] = useState<"consume" | "temp">("consume");
-  const [dragging, setDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const folderInputRef = useRef<HTMLInputElement>(null);
+  const [files, setFiles] = useState<RichFile[]>([]);
+  const [uploadDir, setUploadDir] = useState(settings.uploadDir || "");
+  const [uploading, setUploading] = useState(false);
+  const [results, setResults] = useState<UploadResult[]>([]);
+  const [progress, setProgress] = useState<number>(0);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
-  const addFiles = (newFiles: File[]) => {
-    const valid = newFiles.filter(isAllowedFile);
+  const handleAdd = useCallback((added: File[]) => {
     setFiles((prev) => {
       const existing = new Set(prev.map((f) => f.name + f.size));
-      return [...prev, ...valid.filter((f) => !existing.has(f.name + f.size))];
+      return [...prev, ...(added as RichFile[]).filter((f) => !existing.has(f.name + f.size))];
     });
-    setStatus("idle");
-    if (valid.length < newFiles.length) {
-      const skipped = newFiles.length - valid.length;
-      setMessage(
-        `${skipped} Datei${skipped !== 1 ? "en" : ""} übersprungen (nur PDF, PNG, JPEG erlaubt)`,
-      );
-      setStatus("error");
-      setTimeout(() => {
-        setStatus("idle");
-        setMessage("");
-      }, 3000);
-    }
-  };
+    setResults([]);
+  }, []);
 
-  const removeFile = (idx: number) =>
+  const handleRemove = (idx: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== idx));
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragging(false);
-    const items = Array.from(e.dataTransfer.files);
-    addFiles(items);
   };
 
   const handleUpload = async () => {
     if (!files.length) return;
-    setStatus("uploading");
-    setMessage("");
-    try {
-      const formData = new FormData();
+    setUploading(true);
+    setResults([]);
+    setProgress(0);
+    const newResults: UploadResult[] = [];
 
-      files.forEach((f) => formData.append("file", f));
-      const endpoint = mode === "consume" ? "/upload/consume" : "/upload/temp";
-      const res = await fetch(`${settings.serverUrl}${endpoint}`, {
-        method: "POST",
-        body: formData,
-        headers: getAuthHeaders(),
-      });
-      console.warn(`res: ${res}`);
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i] as RichFile;
+      const fd = new FormData();
+      fd.append("file", file);
 
-      if (res.ok) {
-        const data = await res.json();
-        setStatus("success");
-        setMessage(
-          `${data.count} Datei${data.count !== 1 ? "en" : ""} erfolgreich hochgeladen`,
-        );
-        setFiles([]);
-      } else {
-        const errText = await res.text();
-        setStatus("error");
-        setMessage(`Fehler ${res.status}: ${errText || res.statusText}`);
+      // Determine target directory: explicit override > folder from webkitRelativePath > settings default
+      const relDir = getRelativeDir(file);
+      const effectiveDir = uploadDir.trim() || relDir || "";
+      if (effectiveDir) fd.append("uploadDir", effectiveDir);
+
+      try {
+        const res = await fetch(`${settings.serverUrl}/upload/consume`, {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: fd,
+        });
+        if (res.ok) {
+          newResults.push({ filename: file.name, ok: true });
+        } else {
+          const body = await res.json().catch(() => ({}));
+          newResults.push({
+            filename: file.name,
+            ok: false,
+            error: body?.error ?? `HTTP ${res.status}`,
+          });
+        }
+      } catch (e: any) {
+        newResults.push({ filename: file.name, ok: false, error: e.message });
       }
-    } catch (e: any) {
-      setStatus("error");
-      setMessage(`Netzwerkfehler: ${e.message} — Server erreichbar?`);
+      setProgress(((i + 1) / files.length) * 100);
+      setResults([...newResults]);
     }
+    setUploading(false);
+    if (newResults.every((r) => r.ok)) setFiles([]);
   };
 
-  const totalSize = files.reduce((s, f) => s + f.size, 0);
-  const fmtSize = (bytes: number) =>
-    bytes > 1024 * 1024
-      ? (bytes / 1024 / 1024).toFixed(1) + " MB"
-      : (bytes / 1024).toFixed(0) + " KB";
+  const successCount = results.filter((r) => r.ok).length;
+  const failCount = results.filter((r) => !r.ok).length;
+
+  const groups = groupByFolder(files);
+  const folderCount = Object.keys(groups).filter(Boolean).length;
+  const hasFolders = folderCount > 0;
+
+  const toggleFolder = (dir: string) => {
+    setExpandedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(dir)) next.delete(dir);
+      else next.add(dir);
+      return next;
+    });
+  };
 
   return (
-    <div className={styles.page}>
-      <header className={styles.header}>
+    <div className={styles.root}>
+      <div className={styles.header}>
         <h1 className={styles.title}>{t.upload.title}</h1>
         <p className={styles.subtitle}>{t.upload.subtitle}</p>
-      </header>
-
-      {/* Mode selector */}
-      <div className={styles.modeRow}>
-        <button
-          className={`${styles.modeBtn} ${mode === "consume" ? styles.modeBtnActive : ""}`}
-          onClick={() => setMode("consume")}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          >
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-            <polyline points="22 4 12 14.01 9 11.01" />
-          </svg>
-          In Archiv aufnehmen
-        </button>
-        <button
-          className={`${styles.modeBtn} ${mode === "temp" ? styles.modeBtnActive : ""}`}
-          onClick={() => setMode("temp")}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          >
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-          </svg>
-          Temporär (temp/)
-        </button>
       </div>
 
-      {/* Drop zone */}
-      <div
-        className={`${styles.dropzone} ${dragging ? styles.dropzoneActive : ""}`}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-      >
-        <svg
-          width="32"
-          height="32"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          style={{ color: "var(--accent)", opacity: 0.8 }}
-        >
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <polyline points="17 8 12 3 7 8" />
-          <line x1="12" y1="3" x2="12" y2="15" />
-        </svg>
-        <p className={styles.dropzoneLabel}>
-          {dragging ? t.upload.dropzoneActive : t.upload.dropzone}
-        </p>
-        <p className={styles.dropzoneHint}>PDF · PNG · JPEG</p>
-
-        {/* Hidden file inputs */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept=".pdf,.png,.jpg,.jpeg"
-          style={{ display: "none" }}
-          onChange={(e) => addFiles(Array.from(e.target.files ?? []))}
-          onClick={(e) => e.stopPropagation()}
+      <div className={styles.body}>
+        <Dropzone
+          files={[]}
+          onAdd={handleAdd}
+          label={t.upload.dropzone}
+          labelActive={t.upload.dropzoneActive}
         />
-        <input
-          ref={folderInputRef}
-          type="file"
-          // @ts-ignore — webkitdirectory is not in the standard types
-          webkitdirectory=""
-          multiple
-          style={{ display: "none" }}
-          onChange={(e) => addFiles(Array.from(e.target.files ?? []))}
-          onClick={(e) => e.stopPropagation()}
-        />
-      </div>
 
-      {/* Folder upload button separate */}
-      <div className={styles.altUploadRow}>
-        <button
-          className={styles.folderBtn}
-          onClick={(e) => {
-            e.stopPropagation();
-            folderInputRef.current?.click();
-          }}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-          </svg>
-          Ordner hochladen
-        </button>
-        <span className={styles.altHint}>
-          Alle PDFs, PNGs und JPEGs im Ordner werden hinzugefügt
-        </span>
-      </div>
-
-      {files.length > 0 && (
-        <div className={styles.fileList}>
-          <div className={styles.fileListHeader}>
-            <span className={styles.fileCount}>
-              {files.length} {t.upload.selectedFiles} · {fmtSize(totalSize)}
-            </span>
-            <button className={styles.clearAll} onClick={() => setFiles([])}>
-              {t.upload.clearAll}
-            </button>
-          </div>
-          <div className={styles.fileRows}>
-            {files.map((f, i) => (
-              <div key={i} className={styles.fileRow}>
-                <div className={styles.fileInfo}>
-                  <span className={styles.fileExt}>
-                    {f.name.split(".").pop()?.toUpperCase()}
+        {files.length > 0 && (
+          <div className={styles.fileList}>
+            <div className={styles.fileListHeader}>
+              <span>
+                {t.upload.selectedFiles} ({files.length})
+                {hasFolders && (
+                  <span className={styles.folderBadge}>
+                    {folderCount} folder{folderCount > 1 ? "s" : ""}
                   </span>
-                  <span className={styles.fileName}>{f.name}</span>
-                  <span className={styles.fileSize}>{fmtSize(f.size)}</span>
-                </div>
-                <button
-                  className={styles.removeBtn}
-                  onClick={() => removeFile(i)}
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
+                )}
+              </span>
+              <button
+                className={styles.clearBtn}
+                onClick={() => { setFiles([]); setResults([]); }}
+              >
+                {t.upload.clearAll}
+              </button>
+            </div>
+
+            {hasFolders ? (
+              // Grouped by folder view
+              Object.entries(groups).map(([dir, groupFiles]) => {
+                const isRoot = !dir;
+                const isExpanded = isRoot || expandedFolders.has(dir);
+                return (
+                  <div key={dir || "__root__"} className={styles.folderGroup}>
+                    {!isRoot && (
+                      <button
+                        className={styles.folderHeader}
+                        onClick={() => toggleFolder(dir)}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                          style={{ transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+                        </svg>
+                        <span className={styles.folderName}>{dir}</span>
+                        <span className={styles.folderCount}>{groupFiles.length} files</span>
+                      </button>
+                    )}
+                    {isExpanded && groupFiles.map((f, relIdx) => {
+                      const idx = files.indexOf(f);
+                      const result = results.find((r) => r.filename === f.name);
+                      return (
+                        <FileRow key={relIdx} file={f} result={result} onRemove={() => handleRemove(idx)} uploading={uploading} isNested={!isRoot} />
+                      );
+                    })}
+                  </div>
+                );
+              })
+            ) : (
+              // Flat list
+              files.map((f, i) => {
+                const result = results.find((r) => r.filename === f.name);
+                return (
+                  <FileRow key={i} file={f} result={result} onRemove={() => handleRemove(i)} uploading={uploading} isNested={false} />
+                );
+              })
+            )}
           </div>
-        </div>
-      )}
-
-      {status === "success" && (
-        <div className={styles.successMsg}>{message}</div>
-      )}
-      {status === "error" && <div className={styles.errorMsg}>{message}</div>}
-
-      <button
-        className={styles.uploadBtn}
-        disabled={!files.length || status === "uploading"}
-        onClick={handleUpload}
-      >
-        {status === "uploading" ? (
-          <>
-            <span className={styles.spinner} /> Wird hochgeladen…
-          </>
-        ) : (
-          `${files.length > 0 ? `${files.length} Datei${files.length !== 1 ? "en" : ""} ` : ""}hochladen`
         )}
-      </button>
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <div className={styles.pathRow}>
+          <label className={styles.pathLabel}>{t.upload.uploadPath}</label>
+          <input
+            className={styles.pathInput}
+            type="text"
+            placeholder={hasFolders ? "Override folder path (optional)" : t.upload.uploadPathPlaceholder}
+            value={uploadDir}
+            onChange={(e) => setUploadDir(e.target.value)}
+            spellCheck={false}
+          />
+          {hasFolders && !uploadDir && (
+            <p className={styles.pathHint}>
+              Folder structure from the dragged directory will be preserved automatically.
+            </p>
+          )}
+        </div>
+
+        {uploading && (
+          <div className={styles.progressWrap}>
+            <div className={styles.progressBar} style={{ width: `${progress}%` }} />
+            <span className={styles.progressLabel}>{Math.round(progress)}%</span>
+          </div>
+        )}
+
+        {results.length > 0 && !uploading && (
+          <div className={`${styles.summary} ${failCount === 0 ? styles.summaryOk : styles.summaryFail}`}>
+            {failCount === 0
+              ? `✓ ${successCount} ${t.upload.success}`
+              : `${successCount} ok · ${failCount} ${t.upload.error}`}
+          </div>
+        )}
+
+        <button
+          className={styles.uploadBtn}
+          onClick={handleUpload}
+          disabled={uploading || files.length === 0}
+        >
+          {uploading
+            ? t.upload.uploading
+            : `${t.upload.uploadBtn} (${files.length})`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FileRow({
+  file,
+  result,
+  onRemove,
+  uploading,
+  isNested,
+}: {
+  file: RichFile;
+  result: UploadResult | undefined;
+  onRemove: () => void;
+  uploading: boolean;
+  isNested: boolean;
+}) {
+  return (
+    <div className={`${styles.fileRow} ${isNested ? styles.fileRowNested : ""}`}>
+      <span className={styles.fileExt}>
+        {file.name.split(".").pop()?.toUpperCase()}
+      </span>
+      <span className={styles.fileName} title={file.webkitRelativePath || file.name}>
+        {file.name}
+      </span>
+      <span className={styles.fileSize}>
+        {file.size >= 1024 * 1024
+          ? (file.size / 1024 / 1024).toFixed(1) + " MB"
+          : (file.size / 1024).toFixed(0) + " KB"}
+      </span>
+      {result ? (
+        <span className={result.ok ? styles.statusOk : styles.statusFail}>
+          {result.ok ? "✓" : `✗ ${result.error}`}
+        </span>
+      ) : (
+        <button
+          className={styles.removeBtn}
+          onClick={onRemove}
+          disabled={uploading}
+        >
+          ×
+        </button>
+      )}
     </div>
   );
 }

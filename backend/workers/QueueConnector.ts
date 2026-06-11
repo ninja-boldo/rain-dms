@@ -1,3 +1,4 @@
+// workers/QueueHandler.ts
 import amqp, {
   Connection,
   Channel,
@@ -7,7 +8,7 @@ import amqp, {
   Replies,
 } from "amqplib";
 import "dotenv/config";
-import { QueueNames, QueueStats } from "../utils/types/main";
+import { QueueNames, QueueStats, OcrResult } from "../utils/types/main";
 import crypto from "crypto";
 
 export class PermanentFailureError extends Error {
@@ -83,9 +84,21 @@ export interface PeekedMessage {
   exchange: string;
 }
 
+type ConsumerCallback<T> = (
+  data: T,
+  raw: ConsumeMessage,
+) => Promise<void> | void;
+
+interface ConsumerRegistration {
+  queueName: string;
+  callback: ConsumerCallback<any>;
+  options: ConsumerOptions;
+}
+
 export class QueueHandler {
   private connection: Connection | null = null;
   private channel: ConfirmChannel | null = null;
+  private isShuttingDown = false;
 
   private managementUrl: string;
   private managementAuth: string;
@@ -102,6 +115,7 @@ export class QueueHandler {
 
   private workerDownloads = new Map<string, WorkerDownloadRecord>();
   private inFlightMessages = 0;
+  private consumerRegistrations: ConsumerRegistration[] = [];
 
   constructor(
     managementUrl: string,
@@ -120,6 +134,86 @@ export class QueueHandler {
       throw new Error("Channel not initialized. Use QueueHandler.create()");
   }
 
+  private async connect(): Promise<void> {
+    if (!process.env.AMQP_URL) throw new Error("AMQP_URL is missing");
+
+    const urlObj = new URL(process.env.AMQP_URL);
+    urlObj.searchParams.set("heartbeat", "60");
+    const balancedUrl = urlObj.toString();
+
+    console.log(`[QueueHandler]: Connecting to broker at ${urlObj.host}...`);
+    this.connection = await amqp.connect(balancedUrl, { timeout: 20000 });
+
+    this.connection.on("error", (err) => {
+      console.error("⚠️ [QueueHandler]: Connection error:", err.message);
+      if (!this.isShuttingDown) this.scheduleReconnect();
+    });
+
+    this.connection.on("close", (err) => {
+      console.warn("🛑 [QueueHandler]: Connection closed:", err?.message);
+      if (!this.isShuttingDown) this.scheduleReconnect();
+    });
+
+    this.connection.on("blocked", (reason) => {
+      console.warn("[QueueHandler]: Connection blocked:", reason);
+    });
+
+    this.connection.on("unblocked", () => {
+      console.log("[QueueHandler]: Connection unblocked");
+    });
+
+    const baseChannel = await this.connection.createConfirmChannel();
+    this.channel = baseChannel;
+
+    this.channel.on("error", (err) => {
+      console.error("⚠️ [QueueHandler]: Channel error:", err.message);
+      if (!this.isShuttingDown) this.scheduleReconnect();
+    });
+
+    this.channel.on("close", () => {
+      console.warn("🛑 [QueueHandler]: Channel closed");
+      if (!this.isShuttingDown) this.scheduleReconnect();
+    });
+
+    await this.channel.prefetch(1);
+
+    // Re-register all consumers safely from cached specifications without duplicating array elements
+    const registrationsToRestore = [...this.consumerRegistrations];
+    this.consumerRegistrations = [];
+    for (const reg of registrationsToRestore) {
+      await this.addQueueOnReceive(reg.queueName, reg.callback, reg.options);
+    }
+
+    console.log("[QueueHandler]: Reconnected and consumers re-registered");
+  }
+
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private reconnectDelay = 5000;
+
+  private scheduleReconnect(): void {
+    if (this.isShuttingDown) return;
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error(
+        "[QueueHandler]: Max reconnection attempts reached. Giving up.",
+      );
+      return;
+    }
+    this.reconnectAttempts++;
+    console.log(
+      `[QueueHandler]: Scheduling reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${this.reconnectDelay}ms...`,
+    );
+    setTimeout(async () => {
+      try {
+        await this.connect();
+        this.reconnectAttempts = 0;
+      } catch (err) {
+        console.error("[QueueHandler]: Reconnection failed:", err);
+        this.scheduleReconnect();
+      }
+    }, this.reconnectDelay);
+  }
+
   static async create(
     url = process.env.AMQP_URL,
     customPrefetch = 1,
@@ -131,44 +225,9 @@ export class QueueHandler {
     },
     vhost = "/",
   ): Promise<QueueHandler> {
-    if (!url) throw new Error("AMQP_URL is missing");
-
     const instance = new QueueHandler(managementUrl, credentials, vhost);
+    await instance.connect();
 
-    const urlObj = new URL(url);
-    urlObj.searchParams.set("heartbeat", "30"); // Lower heartbeat to detect dead connections faster
-    const balancedUrl = urlObj.toString();
-
-    console.log(`[QueueHandler]: Connecting to broker at ${urlObj.host}...`);
-    instance.connection = await amqp.connect(balancedUrl, { timeout: 10000 });
-
-    instance.connection.on("error", (err) => {
-      console.error(
-        "⚠️ [QueueHandler]: Connection error encountered:",
-        err.message,
-      );
-    });
-
-    instance.connection.on("close", (err) => {
-      console.warn(
-        "🛑 [QueueHandler]: AMQP connection interface closed down:",
-        err?.message || "No error details context provided.",
-      );
-    });
-
-    const baseChannel = await instance.connection.createConfirmChannel();
-    instance.channel = baseChannel;
-
-    baseChannel.on("error", (err) => {
-      console.error(
-        "⚠️ [QueueHandler]: Underlying channel exception occurred:",
-        err.message,
-      );
-    });
-
-    await instance.channel.prefetch(customPrefetch);
-
-    // Bootstrap queues sequentially to guarantee initialization safety
     for (const queueName of Object.values(QueueNames)) {
       await instance.assertQueue(queueName);
     }
@@ -296,7 +355,6 @@ export class QueueHandler {
           (queueData.messages_ready ?? 0) > totalConsumers * 20,
       };
     } catch (e: any) {
-      // Fallback response if management API is polled mid-boot
       return {
         queue: queueName,
         messages: 0,
@@ -371,7 +429,6 @@ export class QueueHandler {
     this.ensureChannel();
     const poisonQueueName = `${queueName}_poison`;
     await this.channel.assertQueue(poisonQueueName, { durable: true });
-
     return this.channel.assertQueue(queueName, {
       durable: true,
       arguments: {
@@ -379,7 +436,6 @@ export class QueueHandler {
         "x-delivery-limit": 5,
         "x-dead-letter-exchange": "",
         "x-dead-letter-routing-key": poisonQueueName,
-        // Note: Deduplication requires the 'rabbitmq_message_deduplication' plugin active on the broker
         "x-message-deduplication": true,
       },
     });
@@ -393,9 +449,7 @@ export class QueueHandler {
     this.ensureChannel();
     const payload =
       typeof message === "string" ? message : JSON.stringify(message);
-
     const messageId = crypto.createHash("md5").update(payload).digest("hex");
-
     await new Promise<void>((resolve, reject) => {
       if (!this.channel)
         return reject(
@@ -403,17 +457,15 @@ export class QueueHandler {
             "[QueueHandler]: Channel dropped before delivery completed",
           ),
         );
-
       this.channel.sendToQueue(
         queueName,
         Buffer.from(payload),
         { ...opts, messageId },
         (err, ok) => {
-          if (err) {
+          if (err)
             return reject(
               new Error(`[Queue] Message rejected by broker: ${err.message}`),
             );
-          }
           this.counters.published.record();
           resolve();
         },
@@ -430,6 +482,18 @@ export class QueueHandler {
     const { noAck = false, manualAck = false } = options;
     await this.assertQueue(queueName);
 
+    // Check configuration arrays before pushing to avoid reconnection allocation duplication
+    const trackingExists = this.consumerRegistrations.some(
+      (reg) => reg.queueName === queueName && reg.callback === onReceive,
+    );
+    if (!trackingExists) {
+      this.consumerRegistrations.push({
+        queueName,
+        callback: onReceive,
+        options,
+      });
+    }
+
     await this.channel.consume(
       queueName,
       async (msg) => {
@@ -444,16 +508,14 @@ export class QueueHandler {
           } catch {
             parsed = content as T;
           }
-
           await onReceive(parsed, msg);
-
-          if (!noAck && !manualAck && this.channel) {
+          if (!noAck && !manualAck && this.channel && !this.channel.closed) {
             this.channel.ack(msg);
             this.counters.acked.record();
           }
         } catch (err) {
           this.counters.nacked.record();
-          if (!noAck && !manualAck && this.channel) {
+          if (!noAck && !manualAck && this.channel && !this.channel.closed) {
             if (err instanceof PermanentFailureError) {
               console.error(
                 "[Queue] Permanent failure — routing to poison queue:",
@@ -478,17 +540,22 @@ export class QueueHandler {
 
   ack(msg: Message): void {
     this.ensureChannel();
-    this.channel.ack(msg);
-    this.counters.acked.record();
+    if (this.channel && !this.channel.closed) {
+      this.channel.ack(msg);
+      this.counters.acked.record();
+    }
   }
 
   nack(msg: Message, requeue = false): void {
     this.ensureChannel();
-    this.channel.nack(msg, false, requeue);
-    this.counters.nacked.record();
+    if (this.channel && !this.channel.closed) {
+      this.channel.nack(msg, false, requeue);
+      this.counters.nacked.record();
+    }
   }
 
   async close(): Promise<void> {
+    this.isShuttingDown = true;
     if (this.channel) {
       await this.channel.close().catch(() => {});
       this.channel = null;

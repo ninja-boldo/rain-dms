@@ -1,273 +1,488 @@
 /* ── GRID CARD ─────────────────────────────────────────────── */
 .card {
-  background: var(--bg-surface);
+  background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
   position: relative;
-  animation: fadeUp 0.2s ease both;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  animation: fadeUp 0.25s cubic-bezier(0.4, 0, 0.2, 1) both;
+  transition:
+    border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
 }
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--gradient-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
 .card:hover {
-  border-color: var(--border-accent);
-  box-shadow: var(--shadow-md);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+.card:hover::before {
+  transform: scaleX(1);
 }
 
 /* ── Thumbnail ── */
 .thumb {
   position: relative;
-  background: var(--bg-elevated);
+  background: #fff;
   overflow: hidden;
   flex-shrink: 0;
   min-height: 60px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+.thumb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 0 1px var(--border);
+  pointer-events: none;
+  z-index: 2;
 }
 .thumbImg {
-  width: 100%; height: 100%;
-  object-fit: cover; object-position: top;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
   filter: brightness(var(--img-brightness));
-  transition: transform 0.25s;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.card:hover .thumbImg { transform: scale(1.03); }
+.card:hover .thumbImg {
+  transform: scale(1.05);
+}
 .thumbFallback {
-  width: 100%; height: 100%;
-  display: flex; align-items: center; justify-content: center;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: var(--bg-overlay);
 }
 .extLabel {
   font-family: var(--font-mono);
-  font-size: 1.1rem; font-weight: 500;
-  color: var(--text-muted); letter-spacing: 0.1em;
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
 }
 .thumbOverlay {
-  position: absolute; inset: 0;
+  position: absolute;
+  inset: 0;
   background: transparent;
   transition: background 0.15s;
 }
-.card:hover .thumbOverlay { background: rgba(200,168,75,0.07); }
+.card:hover .thumbOverlay {
+  background: rgba(200, 168, 75, 0.07);
+}
 .extBadge {
-  position: absolute; top: 5px; right: 5px;
+  position: absolute;
+  top: 6px;
+  right: 6px;
   font-family: var(--font-mono);
-  font-size: 0.58rem; font-weight: 500; letter-spacing: 0.06em;
-  padding: 2px 5px;
-  background: rgba(14,13,11,0.75);
-  border: 1px solid var(--border-accent);
-  border-radius: 3px; color: var(--accent);
-  backdrop-filter: blur(4px);
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 3px 6px;
+  background: var(--accent-glow);
+  border: 1px solid var(--accent-dim);
+  border-radius: 4px;
+  color: var(--accent);
+  backdrop-filter: var(--backdrop-blur);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.extBadge:hover {
+  background: var(--accent);
+  color: var(--bg-card);
+  transform: scale(1.05);
 }
 
 /* ── Multi-page navigator (grid) ── */
 .pageNav {
   position: absolute;
-  bottom: 5px; left: 50%;
+  bottom: 8px;
+  left: 50%;
   transform: translateX(-50%);
-  display: flex; align-items: center; gap: 3px;
-  background: rgba(14,13,11,0.82);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-overlay);
   border: 1px solid var(--border-accent);
-  border-radius: 4px;
-  padding: 2px 4px;
-  backdrop-filter: blur(6px);
+  border-radius: 6px;
+  padding: 3px 6px;
+  backdrop-filter: var(--backdrop-blur);
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 4;
+  box-shadow: var(--shadow-md);
 }
-.card:hover .pageNav { opacity: 1; }
+.card:hover .pageNav {
+  opacity: 1;
+}
 .pageNavBtn {
-  background: none; border: none;
+  background: none;
+  border: none;
   color: var(--text-secondary);
-  font-size: 0.95rem; line-height: 1;
-  padding: 0 3px; cursor: pointer;
-  transition: color 0.12s;
-  display: flex; align-items: center;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 1px 4px;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    transform 0.15s;
+  display: flex;
+  align-items: center;
 }
-.pageNavBtn:hover:not(:disabled) { color: var(--accent); }
-.pageNavBtn:disabled { opacity: 0.25; cursor: default; }
+.pageNavBtn:hover:not(:disabled) {
+  color: var(--accent);
+  transform: scale(1.1);
+}
+.pageNavBtn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
 .pageNavLabel {
   font-family: var(--font-mono);
-  font-size: 0.58rem; color: var(--text-muted);
-  min-width: 26px; text-align: center;
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  min-width: 26px;
+  text-align: center;
   user-select: none;
 }
 
 /* ── Delete button ── */
 .deleteBtn {
-  position: absolute; bottom: 5px; left: 5px;
-  height: 20px; width: 20px; border-radius: 4px;
-  background: rgba(14,13,11,0.7);
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  height: 22px;
+  width: 22px;
+  border-radius: 5px;
+  background: var(--bg-overlay);
   border: 1px solid var(--border-accent);
   color: var(--text-muted);
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: var(--backdrop-blur);
   opacity: 0;
-  transition: opacity 0.15s, color 0.15s, background 0.15s, border-color 0.15s;
+  transition:
+    opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.card:hover .deleteBtn { opacity: 1; }
-.deleteBtn:hover { color: var(--red); border-color: var(--red); background: rgba(196,90,74,0.18); }
+.card:hover .deleteBtn {
+  opacity: 1;
+}
+.deleteBtn:hover {
+  color: var(--red);
+  border-color: var(--red);
+  background: var(--danger-glow);
+  transform: scale(1.1);
+}
 .deleteBtnConfirm {
-  opacity: 1 !important; color: var(--red) !important;
+  opacity: 1 !important;
+  color: var(--red) !important;
   border-color: var(--red) !important;
-  background: rgba(196,90,74,0.22) !important;
+  background: var(--danger-glow) !important;
   animation: pulse 0.7s ease infinite;
 }
 
 /* ── Body ── */
-.body { padding: 7px 9px 8px; min-width: 0; }
+.body {
+  padding: 8px 10px 9px;
+  min-width: 0;
+}
 .filename {
   font-family: var(--font-mono);
-  font-size: 0.72rem; font-weight: 500;
+  font-size: 0.75rem;
+  font-weight: 600;
   color: var(--text-primary);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  margin-bottom: 2px; letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 3px;
+  letter-spacing: -0.02em;
 }
 .bodyMeta {
-  display: flex; align-items: center;
-  justify-content: space-between; gap: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 2px;
 }
 .date {
   font-family: var(--font-mono);
-  font-size: 0.62rem; color: var(--text-muted);
+  font-size: 0.62rem;
+  color: var(--text-muted);
 }
 .pageCountBadge {
   font-family: var(--font-mono);
-  font-size: 0.58rem; color: var(--accent);
-  background: var(--accent-glow);
-  border: 1px solid var(--accent-dim);
-  border-radius: 3px; padding: 1px 5px;
+  font-size: 0.58rem;
+  font-weight: 600;
+  color: var(--success);
+  background: var(--success-glow);
+  border: 1px solid var(--success-dim);
+  border-radius: 4px;
+  padding: 2px 5px;
   white-space: nowrap;
 }
-.tags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px; }
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 4px;
+}
 .tag {
-  font-size: 0.58rem; padding: 1px 5px;
+  font-size: 0.58rem;
+  padding: 2px 5px;
   background: var(--accent-glow);
   border: 1px solid var(--accent-dim);
-  color: var(--accent); border-radius: 2px;
-  font-family: var(--font-mono); white-space: nowrap;
+  color: var(--accent);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tag:hover {
+  background: var(--accent);
+  color: var(--bg-card);
 }
 .deleteError {
-  color: var(--red, #f85149); font-size: 0.6rem;
-  margin-top: 3px; font-family: var(--font-mono); word-break: break-word;
+  color: var(--red, #f85149);
+  font-size: 0.6rem;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  word-break: break-word;
 }
 
 /* ── LIST ROW ─────────────────────────────────────────────── */
 .listRow {
-  display: flex; align-items: center; gap: 0;
-  background: var(--bg-surface);
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 6px; overflow: hidden;
+  border-radius: 10px;
+  overflow: hidden;
   cursor: pointer;
-  animation: fadeUp 0.18s ease both;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  animation: fadeUp 0.25s cubic-bezier(0.4, 0, 0.2, 1) both;
+  transition:
+    border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.listRow::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--gradient-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .listRow:hover {
-  border-color: var(--border-accent);
-  box-shadow: var(--shadow-md);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-1px);
+}
+.listRow:hover::before {
+  transform: scaleX(1);
 }
 .listThumb {
-  width: 62px; height: 58px;
-  flex-shrink: 0; overflow: hidden;
-  background: var(--bg-elevated);
+  width: 68px;
+  height: 64px;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: #fff;
   position: relative;
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 .listThumbImg {
-  width: 100%; height: 100%;
-  object-fit: cover; object-position: top;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
   filter: brightness(var(--img-brightness));
-  transition: transform 0.22s;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.listRow:hover .listThumbImg { transform: scale(1.06); }
+.listRow:hover .listThumbImg {
+  transform: scale(1.1);
+}
 .listThumbFallback {
-  width: 100%; height: 100%;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--bg-overlay);
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface);
 }
 .listThumbOverlay {
-  position: absolute; inset: 0;
-  background: transparent; transition: background 0.15s;
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.listRow:hover .listThumbOverlay { background: rgba(200,168,75,0.06); }
+.listRow:hover .listThumbOverlay {
+  background: var(--accent-glow);
+}
 
 .listInfo {
-  flex: 1; min-width: 0;
-  padding: 8px 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
 }
 .listTop {
-  display: flex; align-items: center; gap: 6px; margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 3px;
 }
 .listExtBadge {
   font-family: var(--font-mono);
-  font-size: 0.55rem; font-weight: 600; letter-spacing: 0.06em;
-  padding: 1px 4px;
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 2px 5px;
   background: var(--accent-glow);
   border: 1px solid var(--accent-dim);
-  border-radius: 2px; color: var(--accent);
+  border-radius: 3px;
+  color: var(--accent);
   flex-shrink: 0;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.listExtBadge:hover {
+  background: var(--accent);
+  color: var(--bg-card);
 }
 .listFilename {
   font-family: var(--font-mono);
-  font-size: 0.78rem; font-weight: 500;
+  font-size: 0.8rem;
+  font-weight: 600;
   color: var(--text-primary);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .listMeta {
-  display: flex; align-items: center; gap: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-family: var(--font-mono);
-  font-size: 0.62rem; color: var(--text-muted);
-  margin-bottom: 4px;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  margin-bottom: 5px;
 }
-.listPageCount { color: var(--accent); }
+.listPageCount {
+  color: var(--success);
+  font-weight: 600;
+}
 
 /* Page nav in list mode */
 .listPageNav {
-  display: flex; align-items: center; gap: 3px;
-  padding: 0 8px; flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 8px;
+  flex-shrink: 0;
   border-left: 1px solid var(--border);
 }
 .listPageBtn {
-  background: none; border: none;
-  color: var(--text-muted); font-size: 1rem;
-  padding: 2px 4px; cursor: pointer;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  padding: 2px 4px;
+  cursor: pointer;
   transition: color 0.12s;
-  display: flex; align-items: center;
+  display: flex;
+  align-items: center;
 }
-.listPageBtn:hover:not(:disabled) { color: var(--accent); }
-.listPageBtn:disabled { opacity: 0.25; cursor: default; }
+.listPageBtn:hover:not(:disabled) {
+  color: var(--accent);
+}
+.listPageBtn:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
 .listPageLabel {
   font-family: var(--font-mono);
-  font-size: 0.6rem; color: var(--text-muted);
-  min-width: 28px; text-align: center; user-select: none;
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  min-width: 28px;
+  text-align: center;
+  user-select: none;
 }
 
 /* Actions */
 .listActions {
-  padding: 0 10px; flex-shrink: 0;
+  padding: 0 10px;
+  flex-shrink: 0;
   border-left: 1px solid var(--border);
   align-self: stretch;
-  display: flex; align-items: center;
+  display: flex;
+  align-items: center;
 }
 .deleteBtnList {
   position: static !important;
   opacity: 0 !important;
   transition: opacity 0.15s !important;
 }
-.listRow:hover .deleteBtnList { opacity: 1 !important; }
+.listRow:hover .deleteBtnList {
+  opacity: 1 !important;
+}
 .listDeleteError {
   font-family: var(--font-mono);
-  font-size: 0.6rem; color: var(--red, #f85149);
+  font-size: 0.6rem;
+  color: var(--red, #f85149);
   padding: 2px 8px;
 }
 
 /* ── Animations ──────────────────────────────────────────── */
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(5px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.55; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
 }
 @keyframes previewIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to   { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }

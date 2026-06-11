@@ -10,10 +10,14 @@ services:
       - ../backend/certs:/etc/nginx/certs:ro
       - ../frontend/dist:/usr/share/nginx/html:ro
     depends_on:
-      - master
-      - volume
-      - filer
-      - s3
+      master:
+        condition: service_started
+      volume:
+        condition: service_started
+      filer:
+        condition: service_started
+      s3:
+        condition: service_healthy # Wait for Seaweed S3 API to pass healthcheck
     networks:
       - dms-network
 
@@ -54,9 +58,6 @@ services:
   s3:
     image: chrislusf/seaweedfs
     container_name: seaweed-s3
-    ports:
-      - "8333:8333"
-      - "9327:9327"
     environment:
       - SEAWEEDFS_S3_KEY=${ACCESS_KEY_S3}
       - SEAWEEDFS_S3_SECRET=${SECRET_KEY_S3}
@@ -65,6 +66,12 @@ services:
       - master
       - volume
       - filer
+    healthcheck:
+      test: ["CMD", "weed", "download", "-server=localhost:8333", ""]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+      start_period: 3s
     networks:
       - dms-network
 
@@ -76,11 +83,11 @@ services:
       - "15672:15672"
     volumes:
       - ./rabbitmq-data:/var/lib/rabbitmq
-      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro   
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./definitions.json:/etc/rabbitmq/definitions.json:ro # <-- Add this line
     restart: unless-stopped
     networks:
       - dms-network
-
   meilisearch:
     image: getmeili/meilisearch:latest
     container_name: meilisearch

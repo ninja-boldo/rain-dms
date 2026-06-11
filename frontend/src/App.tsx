@@ -8,6 +8,7 @@ import Search from "./pages/Search";
 import Upload from "./pages/Upload";
 import Settings from "./pages/Settings";
 import Dashboard from "./pages/Dashboard";
+import Tags from "./pages/Tags";
 import Login from "./pages/Login";
 import "./index.css";
 
@@ -29,6 +30,7 @@ export default function App() {
               <Route path="/upload" element={<Upload />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/tags" element={<Tags />} />
             </Routes>
           </Layout>
         </AuthGate>

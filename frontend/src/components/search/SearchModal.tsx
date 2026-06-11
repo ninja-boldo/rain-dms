@@ -374,10 +374,13 @@ export default function SearchModal({ onClose }: Props) {
           )}
           <div className={styles.footerKeys}>
             <span className={styles.kbdPair}>
-              <kbd>↑↓</kbd> navigieren
+              <kbd>↑↓</kbd> navigate
             </span>
             <span className={styles.kbdPair}>
-              <kbd>↵</kbd> öffnen
+              <kbd>↵</kbd> open
+            </span>
+            <span className={styles.kbdPair}>
+              <kbd>Tab+↵</kbd> full search
             </span>
           </div>
         </div>

@@ -25,3 +25,4 @@ consumed_files/
 /docker/meili_data
 /docker/rabbit*
 /docker/seaweed*
+*.log
