@@ -1,0 +1,187 @@
+# 1. Tell Nginx to look inside the wrapper Docker puts around packets
+    set_real_ip_from  192.168.65.0/24; # Docker Desktop Mac Gateway
+    set_real_ip_from  172.16.0.0/12;   # Docker Internal Bridge Networks
+    real_ip_header    X-Forwarded-For;
+    real_ip_recursive on;
+
+    add_header X-Debug-Stage $upstream_status always;
+    add_header X-Debug-Upstream $upstream_addr always;
+    add_header X-Debug-Host $host always;
+    add_header X-Debug-URI $request_uri always;
+
+log_format proxied '$realip_remote_addr [$http_x_forwarded_for] - $remote_user [$time_local] '
+                   '"$request" $status $body_bytes_sent '
+                   '"$http_referer" "$http_user_agent"';
+
+log_format debug '$time_local | $status | $request_method $request_uri | '
+                 'ip=$remote_addr | ua="$http_user_agent" | '
+                 'upstream=$upstream_addr | upstream_status=$upstream_status | '
+                 'auth=$upstream_http_x_auth_error';
+
+    access_log /var/log/nginx/debug.log debug;
+    access_log /var/log/nginx/access.log proxied;
+    error_log  /var/log/nginx/error.log warn;
+
+    
+    # Global optimization thresholds
+    client_max_body_size 5000M;
+
+    gzip on;
+    gzip_types text/css application/javascript image/svg+xml application/json;
+    gzip_min_length 1000;
+
+    server {
+        listen 443 ssl http2;
+        server_name ${SERVER_IP};
+
+        ssl_certificate     /etc/nginx/certs/rain.dms.cert.pem;
+        ssl_certificate_key /etc/nginx/certs/rain.dms.cert-key.pem;
+
+        client_body_timeout   300s;
+        client_header_timeout 300s;
+
+        set $err_stage "unknown";
+        set $err_detail "none";
+        set $err_upstream $upstream_addr;
+        set $err_status $upstream_status;
+
+        error_page 403 = @honeypot;
+
+        location @honeypot {
+            access_log /var/log/nginx/honeypot.log proxied;  # separate log file
+            default_type application/json;
+            return 200 '{"status":"ok","documents":[],"total":0}';
+        } 
+
+        # ─── FRONTEND ─────────────────────────────────────────────────────────
+        location / {
+            allow 192.168.1.0/24;
+            allow 127.0.0.1;
+            allow 192.168.65.1;
+            deny all;
+
+            root /usr/share/nginx/html;
+            index index.html;
+            try_files $uri $uri/ /index.html;
+        }
+
+        # ─── AUTH SUBREQUEST ──────────────────────────────────────────────────
+        location = /_auth {
+             proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Debug-Stage "auth_subrequest";
+
+            internal;
+            resolver 127.0.0.11 valid=10s;
+
+            set $auth_target "https://server:3000/auth/validate-jwt";
+            proxy_pass $auth_target;
+
+            proxy_ssl_verify off;
+
+            proxy_pass_request_body off;
+            proxy_set_header Content-Length "";
+
+            proxy_set_header Authorization  $http_authorization;
+            proxy_set_header X-Auth-Token   $http_x_auth_token;
+            proxy_set_header X-Username     $http_x_username;
+        }
+
+        # ─── S3 PIPELINE ──────────────────────────────────────────────────────
+        location /s3/ {
+            allow 192.168.1.0/24;  # Trust and allow local home Wi-Fi network devices
+            allow 127.0.0.1;       # Allow localhost machine testing
+            allow 192.168.65.1;
+            allow 172.16.0.0/12;
+            deny all;
+
+            proxy_intercept_errors on;
+            auth_request_set $err_stage "auth";
+            auth_request_set $err_detail $auth_error_reason;
+
+            proxy_set_header Authorization $http_authorization;
+            proxy_set_header X-Auth-Token   $http_x_auth_token;
+            proxy_set_header X-Debug-S3 "nginx-proxy";
+            proxy_set_header X-Debug-Path $request_uri;
+            proxy_set_header Host               $http_host;
+            proxy_set_header X-Real-IP          $remote_addr;
+            proxy_set_header X-Forwarded-For    $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto  $scheme;
+
+            auth_request /_auth;
+
+            auth_request_set $auth_upstream_status $upstream_status;
+            auth_request_set $auth_error_reason    $upstream_http_x_auth_error;
+
+            error_page 400 401 403 404 500 502 503 504 = @s3_error;
+
+            # Step 2 — Route target processing
+            rewrite ^/s3/(.*)$ /$1 break;
+
+            # Stream optimization directives
+            proxy_request_buffering off;
+            proxy_buffering         off;
+            proxy_http_version      1.1;
+            proxy_set_header        Connection "";
+
+            # Separates chunk streaming from the auth execution window
+            client_body_buffer_size 16M;
+
+            # Target processing connection thresholds
+            proxy_connect_timeout   300s;
+            proxy_send_timeout      300s;
+            proxy_read_timeout      300s;
+
+            resolver 127.0.0.11 valid=10s;
+            proxy_pass http://s3:8333;
+        }
+
+        # ─── BACKEND API ──────────────────────────────────────────────────────
+        location /api/ {
+            set $backend_target "https://server:3000";
+            rewrite ^/api/(.*)$ /$1 break;
+            
+            resolver 127.0.0.11 valid=10s;
+            proxy_pass $backend_target;
+
+            proxy_ssl_verify    off;
+            proxy_http_version  1.1;
+            proxy_set_header    Connection          "";
+            proxy_set_header    Host                $host;
+            proxy_set_header    X-Real-IP           $remote_addr;
+            proxy_set_header    X-Forwarded-For     $proxy_add_x_forwarded_for;
+            proxy_set_header    X-Forwarded-Proto   $scheme;
+        }
+
+        location /identify/self {
+            access_log /var/log/nginx/honeypot.log proxied;
+            default_type application/json;
+            return 200 '{ "status": "ok", "identity": "nginx", "hex": "${SERVER_IDENT_HEX_STRING}" }';             
+        }
+
+        # ─── S3 ERROR HANDLERS ────────────────────────────────────────────────
+    location @s3_error {
+
+        default_type application/xml;
+
+        set $final_stage $err_stage;
+        if ($final_stage = "") { set $final_stage "nginx"; }
+
+        set $final_upstream $err_upstream;
+        if ($final_upstream = "") { set $final_upstream "none"; }
+
+        return 200 '<?xml version="1.0" encoding="UTF-8"?>
+    <Error>
+        <Code>S3PipelineError</Code>
+        <Message>Request failed in S3 pipeline</Message>
+
+        <Stage>$final_stage</Stage>
+        <HTTPStatus>$status</HTTPStatus>
+        <Upstream>$final_upstream</Upstream>
+        <UpstreamStatus>$err_status</UpstreamStatus>
+
+        <Detail>$err_detail</Detail>
+        <Path>$request_uri</Path>
+    </Error>';
+    }
+}

@@ -6,6 +6,10 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import dotenv from "dotenv";
+import { inspect } from "util";
+import { getS3Client, initBuckets } from "./workers/ocr/utils";
+import { S3Client } from "@aws-sdk/client-s3";
+import { getConsumePath } from "./utils/utils";
 
 dotenv.config();
 
@@ -13,7 +17,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const parentDir = path.resolve(__dirname, "..");
 const root = process.env.ROOT_DIR ?? parentDir;
-const consumeFolder = path.join(root, ImportantDirs.consume);
+const consumeFolder = getConsumePath();
 const tempFolder = path.join(root, ImportantDirs.temp);
 const dirs = [root, consumeFolder, tempFolder];
 
@@ -27,12 +31,51 @@ console.log("AMQP URL:", process.env.AMQP_URL);
 const fileMerger = new FileMerger();
 const fileWatcher = FileWatcher();
 
+function timeout(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function start() {
   try {
-    await Promise.all([fileMerger.init(), fileWatcher]);
-    console.log("All background systems are running.");
+    const waitTime: number = 10000;
+    console.log(`waiting for ${waitTime} ms`);
+    await timeout(waitTime);
+
+    console.log("Initializing systems...");
+
+    const s3: S3Client = await getS3Client();
+    await initBuckets(s3);
+    await timeout(2500);
+
+    const [merger, watcher] = await Promise.allSettled([
+      fileMerger.init(),
+      fileWatcher,
+    ]);
+
+    if (merger.status === "rejected" || watcher.status === "rejected") {
+      if (merger.status === "rejected") {
+        console.error(
+          "❌ fileMerger failed:",
+          inspect(merger.reason, { depth: null, colors: true }),
+        );
+      }
+      if (watcher.status === "rejected") {
+        console.error(
+          "❌ fileWatcher failed:",
+          inspect(watcher.reason, { depth: null, colors: true }),
+        );
+      }
+      throw new Error("Startup aborted.");
+    }
+
+    console.log("🚀 All background systems running.");
   } catch (error) {
-    console.error("Critical worker failure during startup:", error);
+    console.error("💥 Critical startup failure:");
+    console.error(
+      error instanceof Error
+        ? error.stack
+        : inspect(error, { depth: null, colors: true }),
+    );
     process.exit(1);
   }
 }

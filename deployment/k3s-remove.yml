@@ -1,0 +1,55 @@
+---
+- name: Remove K3s from Orchestrator
+  hosts: k3s_orchestrator
+  become: true
+  tasks:
+    - name: Check if K3s uninstall script exists
+      ansible.builtin.stat:
+        path: /usr/local/bin/k3s-uninstall.sh
+      register: k3s_uninstall
+
+    - name: Run K3s uninstall
+      ansible.builtin.command: /usr/local/bin/k3s-uninstall.sh
+      when: k3s_uninstall.stat.exists
+
+    - name: Clean up CNI config leftovers
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/cni/net.d
+        - /opt/cni/bin
+        - /var/lib/cni
+
+    - name: Check if Helm exists
+      ansible.builtin.stat:
+        path: /usr/local/bin/helm
+      register: helm_binary
+
+    - name: Remove Helm binary from server
+      ansible.builtin.file:
+        path: /usr/local/bin/helm
+        state: absent
+      when: helm_binary.stat.exists
+
+- name: Remove K3s from Workers
+  hosts: k3s_workers
+  become: true
+  tasks:
+    - name: Check if K3s agent uninstall script exists
+      ansible.builtin.stat:
+        path: /usr/local/bin/k3s-agent-uninstall.sh
+      register: k3s_agent_uninstall
+
+    - name: Run K3s agent uninstall
+      ansible.builtin.command: /usr/local/bin/k3s-agent-uninstall.sh
+      when: k3s_agent_uninstall.stat.exists
+
+    - name: Clean up CNI config leftovers
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/cni/net.d
+        - /opt/cni/bin
+        - /var/lib/cni

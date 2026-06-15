@@ -1,40 +1,41 @@
-import React from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AppProvider } from "./lib/AppContext";
-import { useApp } from "./lib/AppContext";
-import Layout from "./components/layout/Layout";
-import Home from "./pages/Home";
-import Search from "./pages/Search";
-import Upload from "./pages/Upload";
-import Settings from "./pages/Settings";
-import Dashboard from "./pages/Dashboard";
-import Tags from "./pages/Tags";
-import Login from "./pages/Login";
-import "./index.css";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useAuthStore } from "./store/auth";
+import Layout from "./components/Layout";
+import LoginPage from "./pages/LoginPage";
+import MainPage from "./pages/MainPage";
+import SearchPage from "./pages/SearchPage";
+import DocumentPage from "./pages/DocumentPage";
+import StatsPage from "./pages/StatsPage";
+import SettingsPage from "./pages/SettingsPage";
+import FileStatsPage from "./pages/FileStatsPage";
 
-function AuthGate({ children }: { children: React.ReactNode }) {
-  const { auth } = useApp();
-  if (!auth) return <Login />;
-  return <>{children}</>;
+function PrivateRoute({ children }: { children: React.ReactNode }) {
+  const token = useAuthStore((s) => s.token);
+  return token ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
 export default function App() {
   return (
-    <AppProvider>
-      <BrowserRouter>
-        <AuthGate>
-          <Layout>
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/search" element={<Search />} />
-              <Route path="/upload" element={<Upload />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/tags" element={<Tags />} />
-            </Routes>
-          </Layout>
-        </AuthGate>
-      </BrowserRouter>
-    </AppProvider>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/"
+          element={
+            <PrivateRoute>
+              <Layout />
+            </PrivateRoute>
+          }
+        >
+          <Route index element={<MainPage />} />
+          <Route path="search" element={<SearchPage />} />
+          <Route path="document" element={<DocumentPage />} />
+          <Route path="file-stats" element={<FileStatsPage />} />
+          <Route path="stats" element={<StatsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }

@@ -1,8 +1,0 @@
-{
-  "identities": [
-    {
-      "name": "default",
-      "actions": ["Read", "Write", "List", "Tagging", "Admin"]
-    }
-  ]
-}

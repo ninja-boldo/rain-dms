@@ -113,3 +113,47 @@ export interface RawBlockNormalized {
     height: number;
   };
 }
+
+export interface QueueObjStartOcr {
+  s3Key: string;
+  username: string;
+  spawnedTime: string;
+  originalConsumePath: string;
+  isEncrypted: boolean;
+}
+export interface QueueObjProcessOcrResult {
+  result: OcrResult;
+  username: string;
+  spawnedTime: string;
+  isEncrypted: boolean;
+  originalFileKey: string;
+  originalConsumePath: string;
+}
+
+export interface S3ReturnObj {
+  s3Key: string;
+  spawnedTimeIso: string;
+}
+export interface PasswordWithTimeSalt {
+  timestampStr: string;
+  iv: string;
+  authTag: string;
+  encrypted: string;
+}
+
+export interface CompositeKey {
+  spawnTimeIso: string;
+  username: string;
+  key: string;
+}
+
+export const ApiPaths = {
+  getEncryptedFileEncKey: "/internal/get_file_enc_key",
+  checkHashExists: "/check/hash_exists",
+  checkUserExists: "/check/user_exists",
+};
+
+export const BucketNames = {
+  userUploads: "uploads",
+  bannerImgs: "banner-imgs",
+};
