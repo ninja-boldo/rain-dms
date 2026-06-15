@@ -2,49 +2,83 @@ import watcher from "@parcel/watcher";
 import { fdir } from "fdir";
 import PQueue from "p-queue";
 import pRetry, { AbortError } from "p-retry";
-import { QueueHandler } from "./QueueConnector";
+import { QueueHandler } from "../utils/helperClasses/QueueConnector";
 import "dotenv/config";
-import { QueueNames } from "../utils/types/main";
+import { BucketNames, QueueNames, QueueObjStartOcr } from "../utils/types/main";
 import fs from "fs";
 import os from "os";
-import {
-  fileHashAlreadyExistingApi,
-  formatFilename,
-  getS3Client,
-  hashFile,
-  initBuckets,
-  sanitizeFilePath,
-  uploadGenericS3,
-} from "./ocr/utils";
 import { S3Client } from "@aws-sdk/client-s3";
+import {
+  encryptFileStream,
+  encryptTxt,
+  generateKey,
+  hashFile,
+} from "../utils/cryptography";
+import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
+import path from "path";
+import { dumpFileKeyPairInDb, fileHashAlreadyExistingApi } from "../utils/utils";
+import { formatFilename, getUsernameFromConsumeDbChecked, sanitizeS3Key } from "../utils/pathHelpers";
+import { getEncryptAtRestIsTrue, getMainEncryptionKey } from "../utils/envHelpers";
+import { getS3Client, uploadGenericS3 } from "../utils/s3Helpers";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Config
+// ─────────────────────────────────────────────────────────────────────────────
 const CONCURRENCY = parseInt(
-  process.env.UPLOAD_CONCURRENCY ?? String(os.cpus().length),
+  process.env.UPLOAD_CONCURRENCY ?? String(Math.min(os.cpus().length, 4)),
 );
 const RETRIES = parseInt(process.env.UPLOAD_RETRIES ?? "3");
-const DEBOUNCE_MS = parseInt(process.env.WATCH_DEBOUNCE_MS ?? "150");
-const ALLOWED_EXT = [".pdf", ".png", ".jpeg"];
+const DEBOUNCE_MS = parseInt(process.env.WATCH_DEBOUNCE_MS ?? "1000");
+// Periodic rescan interval — catches events missed by inotify on deep new dirs
+const RESCAN_MS = parseInt(process.env.WATCH_RESCAN_MS ?? "30000");
 
+const ALLOWED_EXT = [".pdf", ".png", ".jpeg", ".jpg"];
+
+const pgPool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 3,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
+});
+const db = drizzle(pgPool);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Process one file
+// ─────────────────────────────────────────────────────────────────────────────
 async function processFile(
-  path: string,
+  filePath: string,
   s3: S3Client,
   queue: QueueHandler,
-  basePath: string,
+  tempFolder: string,
 ): Promise<void> {
-  const hash = await hashFile(path);
+  console.log(`[watcher] 🔍 hashing  ${filePath}`);
+  const hash = await hashFile(filePath);
+
   const isAlreadyProcessed = await fileHashAlreadyExistingApi(hash);
   if (isAlreadyProcessed) {
+    console.log(`[watcher] ⏩ skip (dup) ${filePath}`);
     return;
   }
-  const sanitizedFilepath = sanitizeFilePath(path);
-  let finalPath = sanitizedFilepath;
 
-  if (path !== sanitizedFilepath) {
-    try {
-      await fs.promises.rename(path, sanitizedFilepath);
-    } catch {
-      finalPath = path;
-    }
+  const isToEncrypt = getEncryptAtRestIsTrue();
+  const originalConsumePath = filePath;
+  const usernameBoundToFile = await getUsernameFromConsumeDbChecked(filePath);
+  const spawnTime = new Date().toISOString();
+
+  let finalPath = filePath;
+  let encryptionKey = "";
+
+  if (isToEncrypt) {
+    encryptionKey = await generateKey();
+    finalPath = await encryptFileStream(
+      filePath,
+      encryptionKey,
+      path.join(
+        tempFolder,
+        path.basename(filePath).replace(/(\.[^.]+)$/, "_encrypted$1"),
+      ),
+    );
   }
 
   await pRetry(
@@ -53,15 +87,45 @@ async function processFile(
       let fileBuffer: Buffer;
 
       try {
-        objectKey = await formatFilename(finalPath, basePath);
+        objectKey = sanitizeS3Key(await formatFilename(finalPath, tempFolder));
         fileBuffer = await fs.promises.readFile(finalPath);
       } catch (err: any) {
         if (err?.code === "ENOENT") throw new AbortError(err);
         throw err;
       }
 
-      await uploadGenericS3(s3, "uploads", objectKey, fileBuffer);
-      await queue.sendMsg(objectKey, QueueNames.startOcrQueue);
+      console.log(
+        `[watcher] ⬆️  uploading ${objectKey} (${(fileBuffer.length / 1024).toFixed(0)} KB)`,
+      );
+      await uploadGenericS3(
+        s3,
+        BucketNames.userUploads,
+        objectKey,
+        fileBuffer,
+        spawnTime,
+      );
+
+      const queueObj: QueueObjStartOcr = {
+        s3Key: objectKey,
+        username: usernameBoundToFile,
+        spawnedTime: spawnTime,
+        originalConsumePath,
+        isEncrypted: isToEncrypt,
+      };
+
+      // ── BUG FIX: was always "" because encryptTxt result was discarded ──────
+      let encryptedEncKey = "";
+      if (isToEncrypt && encryptionKey !== "") {
+        encryptedEncKey = await encryptTxt(
+          encryptionKey,
+          getMainEncryptionKey(),
+        );
+      }
+
+      await dumpFileKeyPairInDb(db, objectKey, encryptedEncKey);
+      await queue.sendMsg(queueObj, QueueNames.startOcrQueue);
+
+      console.log(`[watcher] ✅ queued   ${JSON.stringify(queueObj)}`);
       await fs.promises.unlink(finalPath);
     },
     {
@@ -70,69 +134,117 @@ async function processFile(
       factor: 2,
       onFailedAttempt: (err) =>
         console.error(
-          `[retry ${err.attemptNumber}/${RETRIES + 1}] ${finalPath}: ${err.message}`,
+          `[watcher] ⚠️  retry ${err.attemptNumber}/${RETRIES + 1} — ${finalPath}: ${err.message}`,
         ),
     },
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Main watcher
+// ─────────────────────────────────────────────────────────────────────────────
 export const FileWatcher = async (): Promise<void> => {
-  const {
-    CONSUME_PATH: consumeFolder,
-    CONSUMED_PATH: consumedFolder,
-    TEMP_PATH: tempFolder,
-  } = process.env;
+  const { CONSUME_PATH: consumeFolder, TEMP_PATH: tempFolder } = process.env;
 
-  if (!consumeFolder || !consumedFolder || !tempFolder) {
+  if (!consumeFolder || !tempFolder) {
     throw new Error(
-      `Missing env vars — CONSUME_PATH=${consumeFolder}, CONSUMED_PATH=${consumedFolder}, TEMP_PATH=${tempFolder}`,
+      `Missing env vars — CONSUME_PATH=${consumeFolder}, TEMP_PATH=${tempFolder}`,
     );
   }
 
   await Promise.all(
-    [consumeFolder, consumedFolder, tempFolder].map((d) =>
+    [consumeFolder, tempFolder].map((d) =>
       fs.promises.mkdir(d, { recursive: true }),
     ),
   );
 
-  const s3 = getS3Client();
+  const s3 = await getS3Client();
   const queueHandler = await QueueHandler.create(process.env.AMQP_URL);
   const pq = new PQueue({ concurrency: CONCURRENCY });
-  await initBuckets(s3);
 
+  // Track which files have already been enqueued in this session to prevent
+  // double-processing from both rescan and inotify events
+  const enqueuedThisSession = new Set<string>();
   const pending = new Map<string, ReturnType<typeof setTimeout>>();
 
-  const enqueue = (path: string): void => {
-    if (!ALLOWED_EXT.some((ext) => path.endsWith(ext))) return;
-    clearTimeout(pending.get(path));
+  const enqueue = (
+    filePath: string,
+    source: "watch" | "scan" | "rescan",
+  ): void => {
+    const ext = filePath.slice(filePath.lastIndexOf(".")).toLowerCase();
+    if (!ALLOWED_EXT.includes(ext)) return;
+
+    clearTimeout(pending.get(filePath));
     pending.set(
-      path,
+      filePath,
       setTimeout(() => {
-        pending.delete(path);
-        pq.add(() => processFile(path, s3, queueHandler, consumeFolder)).catch(
-          (err) =>
-            console.error(`Failed after ${RETRIES} retries — ${path}:`, err),
+        pending.delete(filePath);
+
+        // Skip if already in flight from a previous event
+        if (enqueuedThisSession.has(filePath)) return;
+        enqueuedThisSession.add(filePath);
+
+        console.log(
+          `[watcher] 📄 detected [${source}] ${filePath} (pq size=${pq.size})`,
+        );
+        pq.add(() =>
+          processFile(filePath, s3, queueHandler, tempFolder).finally(() => {
+            // Remove from session set after processing so re-uploads (same path,
+            // new content) can be re-queued — the hash check deduplicates
+            enqueuedThisSession.delete(filePath);
+          }),
+        ).catch((err) =>
+          console.error(
+            `[watcher] ❌ failed after ${RETRIES} retries — ${filePath}:`,
+            err,
+          ),
         );
       }, DEBOUNCE_MS),
     );
   };
 
-  const existing = (await new fdir()
-    .withFullPaths()
-    .crawl(consumeFolder)
-    .withPromise()) as string[];
+  // ── Initial scan ────────────────────────────────────────────────────────────
+  const scan = async (label: "scan" | "rescan"): Promise<void> => {
+    const files = (await new fdir()
+      .withFullPaths()
+      .filter((fp) =>
+        ALLOWED_EXT.includes(fp.slice(fp.lastIndexOf(".")).toLowerCase()),
+      )
+      .crawl(consumeFolder)
+      .withPromise()) as string[];
 
-  for (const file of existing) enqueue(file);
+    if (files.length > 0)
+      console.log(
+        `[watcher] 🗂  ${label}: ${files.length} files found in ${consumeFolder}`,
+      );
 
+    for (let i = 0; i < files.length; i++) {
+      enqueue(files[i], label);
+      // Micro-pause every 50 to avoid hammering the event loop on large dirs
+      if (i > 0 && i % 50 === 0)
+        await new Promise<void>((r) => setTimeout(r, 50));
+    }
+  };
+
+  await scan("scan");
+
+  // ── inotify subscription ────────────────────────────────────────────────────
   await watcher.subscribe(consumeFolder, (err, events) => {
-    if (err) return console.error("Watcher error:", err);
+    if (err) {
+      console.error("[watcher] ❌ watcher error:", err);
+      return;
+    }
     for (const event of events) {
-      if (event.type === "create" || event.type === "update")
-        enqueue(event.path);
+      if (event.type === "create" || event.type === "update") {
+        enqueue(event.path, "watch");
+      }
     }
   });
 
+  // ── Periodic rescan fallback ────────────────────────────────────────────────
+  setInterval(() => scan("rescan"), RESCAN_MS);
+
   console.log(
-    `FileWatcher ready — concurrency=${CONCURRENCY}, retries=${RETRIES}, debounce=${DEBOUNCE_MS}ms`,
+    `[watcher] 🚀 ready — concurrency=${CONCURRENCY}, retries=${RETRIES}, debounce=${DEBOUNCE_MS}ms, rescan=${RESCAN_MS}ms`,
   );
 };

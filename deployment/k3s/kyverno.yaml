@@ -2,36 +2,57 @@ apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
   name: inject-custom-ca-certs
-
 spec:
-  background: false
-
+  background: true
   rules:
-    - name: mutate-pods-for-bun-ssl
-
+    - name: inject-ca-volume
       match:
         any:
           - resources:
               kinds:
                 - Pod
-
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kyverno
       mutate:
         patchStrategicMerge:
           spec:
-            containers:
-              - (name): "*"
-
-                env:
-                  - name: NODE_EXTRA_CA_CERTS
-                    value: "/etc/ssl/custom-certs/rootCA.pem"
-
-                volumeMounts:
-                  - name: custom-ca-cert
-                    mountPath: /etc/ssl/custom-certs/rootCA.pem
-                    subPath: ca.crt
-                    readOnly: true
-
             volumes:
-              - name: custom-ca-cert
+              - name: custom-root-ca
                 secret:
-                  secretName: external-server-cert
+                  secretName: custom-root-ca
+
+    - name: inject-ca-container-config
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kyverno
+      mutate:
+        foreach:
+          - list: "request.object.spec.containers"
+            patchStrategicMerge:
+              spec:
+                containers:
+                  - name: "{{ element.name }}"
+                    env:
+                      - name: NODE_EXTRA_CA_CERTS
+                        value: /etc/ssl/custom-certs/ca.crt
+                      - name: REQUESTS_CA_BUNDLE
+                        value: /etc/ssl/custom-certs/ca.crt
+                      - name: CURL_CA_BUNDLE
+                        value: /etc/ssl/custom-certs/ca.crt
+                    volumeMounts:
+                      - name: custom-root-ca
+                        mountPath: /etc/ssl/custom-certs/ca.crt
+                        subPath: ca.crt
+                        readOnly: true

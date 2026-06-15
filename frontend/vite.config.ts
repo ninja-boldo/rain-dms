@@ -5,12 +5,14 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    proxy: {
-      "/api": {
-        target: "http://localhost:3000",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ""),
-      },
-    },
+    // Uncomment to proxy API requests during dev (avoids CORS + mixed-content issues)
+    // proxy: {
+    //   '/api': {
+    //     target: 'https://localhost:3000',
+    //     changeOrigin: true,
+    //     rewrite: (path) => path.replace(/^\/api/, ''),
+    //     secure: false, // accept self-signed mkcert certs
+    //   },
+    // },
   },
 });

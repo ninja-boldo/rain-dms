@@ -5,17 +5,28 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import jwt from "jsonwebtoken";
-import path from "node:path";
 import { Pool } from "pg";
 import { documentsTable, pagesTable, usersTable } from "./db/schema";
-import { QueueNames, QueueStats } from "./utils/types/main";
+import { BucketNames, QueueNames, QueueStats } from "./utils/types/main";
+import fs from "fs";
 import {
   getQueueHandler as rawGetQueueHandler,
-  handleUpload,
+  isValidAuthUser,
+  isValidAuthWorker,
   isValidAuth,
+  getMainEncryptionKey,
+  getConsumePath,
 } from "./utils/utils";
-import { getMeilisearch, syncIndex } from "./workers/IndexBuilder";
-import { fileHashExistsServer } from "./workers/ocr/utils";
+import { getMeilisearch, syncIndex } from "./utils/IndexBuilder";
+import {
+  fileHashExistsServer,
+  getFileEncKeyDb,
+  getS3Url,
+  usernameExistsServer,
+} from "./workers/ocr/utils";
+import { encryptTxt, passwordToKeyHex } from "./utils/cryptography";
+import { QueueHandler } from "./utils/helperClasses/QueueConnector";
+import path from "node:path";
 
 const pgPool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -31,7 +42,7 @@ interface CacheEntry {
 }
 const _cache = new Map<string, CacheEntry>();
 
-let sharedQueueHandler: any = null;
+let sharedQueueHandler: QueueHandler | null = null;
 async function getSharedQueue() {
   if (!sharedQueueHandler) {
     sharedQueueHandler = await rawGetQueueHandler();
@@ -57,12 +68,20 @@ function invalidate(...keys: string[]) {
 
 const app = new Hono();
 
-if (process.env.S3_ENDPOINT === null || !process.env.S3_ENDPOINT) {
-  throw Error(
-    "you gotta set S3_ENDPOINT in the .env file which currently isnt set",
-  );
+let cachedS3Url: string | null = null;
+async function resolveS3BaseUrl(
+  forceNonLocalNoChecks: boolean = false,
+): Promise<string> {
+  const originalS3: string | null = cachedS3Url;
+  if (!cachedS3Url) {
+    cachedS3Url = await getS3Url(true, forceNonLocalNoChecks);
+  }
+  if (originalS3 !== cachedS3Url) {
+    console.log(`now using ${cachedS3Url} instead of the old ${originalS3}`);
+  }
+  return cachedS3Url;
 }
-const s3BaseUrl: string = process.env.S3_ENDPOINT;
+
 const mainBucket: string = "uploads";
 
 const PublicEndpoints = [
@@ -104,6 +123,7 @@ app.use(
 );
 
 app.use("*", async (c, next) => {
+  const reqId = crypto.randomUUID();
   const currentPath = c.req.path.replace(/\/$/, "");
   const isPublic = PublicEndpoints.some(
     (p) => p.replace(/\/$/, "") === currentPath,
@@ -132,9 +152,24 @@ app.use("*", async (c, next) => {
       } catch (jwtErr) {}
     }
 
-    await isValidAuth(db, token, username);
-    return next();
+    const isValid: boolean = await isValidAuth(db, token, username);
+    if (isValid === true) {
+      return next();
+    }
+    return c.json(
+      {
+        detail: "Authentication failed cause of invalid or expired credentials",
+      },
+      401,
+    );
   } catch (err: any) {
+    const jsonError = {
+      reqId,
+      message: err?.message,
+      stack: err?.stack,
+    };
+    console.error("[AUTH_VALIDATE_JWT][ERROR]", JSON.stringify(jsonError));
+    c.header("X-Auth-Error", JSON.stringify(jsonError));
     return c.json({ detail: "Authentication failed" }, 401);
   }
 });
@@ -142,20 +177,31 @@ app.use("*", async (c, next) => {
 setTimeout(() => syncIndex().catch(console.error), 1000);
 
 async function initDefaultUser() {
-  const defaultUsername = "tom";
-  const defaultPassword = "torvalds!";
+  const defaultUsername = process.env.DEFAULT_USERNAME;
+  const defaultPassword = process.env.DEFAULT_PASSWORD;
+  if (defaultUsername === undefined || defaultPassword === undefined) {
+    throw Error(
+      `you gotta set both DEFAULT_USERNAME(equals: ${defaultUsername}) and DEFAULT_PASSWORD(equals: ${defaultPassword})`,
+    );
+  }
   try {
-    const existing = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.username, defaultUsername))
-      .limit(1);
-    if (!existing.length) {
-      const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-      await db
-        .insert(usersTable)
-        .values({ username: defaultUsername, password_hash: hashedPassword });
-    }
+    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+    const hexPassword: string = passwordToKeyHex(defaultPassword);
+    const encrypted_key = await encryptTxt(getMainEncryptionKey(), hexPassword);
+    await db
+      .insert(usersTable)
+      .values({
+        username: defaultUsername,
+        password_hash: hashedPassword,
+        encrypted_key,
+      })
+      .onConflictDoUpdate({
+        target: usersTable.username,
+        set: {
+          password_hash: hashedPassword,
+          encrypted_key,
+        },
+      });
   } catch (err) {
     console.error("[DB Init Critical]:", err);
   }
@@ -163,40 +209,83 @@ async function initDefaultUser() {
 setTimeout(() => initDefaultUser().catch(console.error), 1500);
 
 app.all("/auth/validate-jwt", async (c) => {
+  const reqId = crypto.randomUUID();
+
   const rawToken =
     c.req.header("X-Auth-Token") ?? c.req.header("Authorization") ?? null;
-  const token = rawToken?.startsWith("Bearer ") ? rawToken.slice(7) : rawToken;
+
   const username =
     c.req.header("X-Username") ?? c.req.header("username") ?? null;
 
+  const token = rawToken?.startsWith("Bearer ") ? rawToken.slice(7) : rawToken;
+
+  console.log("[AUTH_VALIDATE_JWT]", {
+    reqId,
+    ip: c.req.header("x-real-ip") ?? c.req.header("x-forwarded-for"),
+    method: c.req.method,
+    url: c.req.url,
+    hasToken: !!token,
+    hasUsername: !!username,
+    rawAuthHeader: rawToken ? "[present]" : "[missing]",
+  });
+
   if (!token) {
+    console.log("[AUTH_VALIDATE_JWT][FAIL]", {
+      reqId,
+      reason: "missing_token",
+    });
+
     return c.json(
-      { detail: "Missing Authorization / X-Auth-Token header" },
+      { detail: "Missing Authorization / X-Auth-Token header", reqId },
       401,
     );
   }
 
-  const secret = process.env.CLUSTER_WORKER_SECRET ?? "";
-  if (token.split(".").length === 3) {
-    try {
-      const decoded = jwt.verify(token, secret);
-      if (decoded && typeof decoded === "object") {
-        if (decoded.role === "worker") return c.json({ role: "worker" }, 200);
-        if (decoded.role === "user") return c.json({ role: "user" }, 200);
-      }
-      return c.json({ detail: "Insufficient role" }, 403);
-    } catch (e: any) {
-      return c.json({ detail: `Token verification failed: ${e.message}` }, 403);
-    }
-  }
-
   try {
-    await isValidAuth(db, token, username);
-    return c.json({ role: "user", username }, 200);
+    const isValidWorker = await isValidAuthWorker(token);
+
+    if (isValidWorker === true) {
+      console.log("[AUTH_VALIDATE_JWT][OK]", {
+        reqId,
+        role: "worker",
+      });
+
+      return c.json({ role: "worker" }, 200);
+    }
+
+    const isValidUser = await isValidAuthUser(db, token, username);
+
+    if (isValidUser === true) {
+      console.log("[AUTH_VALIDATE_JWT][OK]", {
+        reqId,
+        role: "user",
+        username,
+      });
+
+      return c.json({ role: "user", username }, 200);
+    }
+
+    console.log("[AUTH_VALIDATE_JWT][FAIL]", {
+      reqId,
+      reason: "invalid_token",
+    });
+
+    return c.json({ detail: "Invalid or expired token", reqId }, 401);
   } catch (err: any) {
+    const jsonError = {
+      reqId,
+      message: err?.message,
+      stack: err?.stack,
+    };
+    console.error("[AUTH_VALIDATE_JWT][ERROR]", JSON.stringify(jsonError));
+    c.header("X-Auth-Error", JSON.stringify(jsonError));
+
     return c.json(
-      { detail: "Authentication signature validation failed" },
-      401,
+      {
+        detail: "Auth service crashed",
+        reqId,
+      },
+      500,
     );
   }
 });
@@ -210,9 +299,14 @@ app.post("/auth/signup", async (c) => {
       return c.json({ error: "Username and password are required" }, 400);
     }
     const hashedPassword = await bcrypt.hash(password, 10);
-    await db
-      .insert(usersTable)
-      .values({ username, password_hash: hashedPassword });
+    const hexPassword: string = passwordToKeyHex(password);
+    const encrypted_key = await encryptTxt(getMainEncryptionKey(), hexPassword);
+
+    await db.insert(usersTable).values({
+      username,
+      password_hash: hashedPassword,
+      encrypted_key: encrypted_key,
+    });
     return c.json({ message: "User created" }, 201);
   } catch (err: any) {
     if (err.code === "23505" || err.message?.includes("unique")) {
@@ -244,12 +338,18 @@ app.post("/auth/signin", async (c) => {
     if (!isPasswordValid) {
       return c.json({ error: "Invalid credentials" }, 401);
     }
-    const jwtSecret = process.env.CLUSTER_WORKER_SECRET;
     const token = jwt.sign(
-      { role: "user", userId: user[0].id },
-      jwtSecret || "celestialisabadplaceholder",
+      {
+        role: "user",
+        userId: user[0].id,
+      },
+      user[0].password_hash,
     );
-    return c.json({ token });
+    return c.json({
+      token: token,
+      encrypted_encrytion_key: user[0].encrypted_key,
+    }); // encrypted_encrytion_key is the key with which all the
+    // file encryption keys are encrypted. while encrypted_encrytion_key is encrypted with the plain text password of the user
   } catch (err: any) {
     return c.json(
       { error: "Internal error during authentication", debug: err.message },
@@ -295,12 +395,12 @@ async function computeStats() {
 
       db
         .select({
-          ext: sql<string>`lower(substring(${documentsTable.filepath} from '\\.([^.]+)$'))`,
+          ext: sql<string>`lower(substring(${documentsTable.fileS3Key} from '\\.([^.]+)$'))`,
           count: sql<number>`count(*)`.mapWith(Number),
         })
         .from(documentsTable)
         .groupBy(
-          sql`lower(substring(${documentsTable.filepath} from '\\.([^.]+)$'))`,
+          sql`lower(substring(${documentsTable.fileS3Key} from '\\.([^.]+)$'))`,
         ),
 
       db
@@ -313,14 +413,14 @@ async function computeStats() {
 
       db
         .select({
-          filepath: documentsTable.filepath,
+          filepath: documentsTable.fileS3Key,
           page_count: sql<number>`count(${pagesTable.page_idx})`.mapWith(
             Number,
           ),
         })
         .from(documentsTable)
         .innerJoin(pagesTable, eq(pagesTable.file_id, documentsTable.file_id))
-        .groupBy(documentsTable.filepath)
+        .groupBy(documentsTable.fileS3Key)
         .orderBy(sql`count(${pagesTable.page_idx}) desc`)
         .limit(20)
         .then((r) =>
@@ -472,7 +572,7 @@ async function computeWorkerDownloadStats() {
   const uniqueHosts = Array.from(new Set(ocrConsumers.map((c) => c.peerHost)));
   const workers = uniqueHosts.map((host, idx) => {
     const targetCon = ocrConsumers.find((c) => c.peerHost === host);
-    const key = `${host}:${targetCon?.peerPort ?? 5672}`;
+    const key = `${host}:${targetCon?.peerPort ?? 5671}`;
     const historicalRecord = recordedStats.find(
       (s: any) => s.ip === host || s.ip === key,
     );
@@ -483,7 +583,7 @@ async function computeWorkerDownloadStats() {
       downloads: historicalRecord ? historicalRecord.totalDownloads : 0,
       bytes: historicalRecord ? historicalRecord.totalBytes : 0,
       last_seen: historicalRecord ? historicalRecord.lastSeenAt : undefined,
-      ip: host ? `${host}:${targetCon?.peerPort ?? 5672}` : undefined,
+      ip: host ? `${host}:${targetCon?.peerPort ?? 5671}` : undefined,
       recent_files: historicalRecord ? historicalRecord.recentFiles : [],
     };
   });
@@ -583,10 +683,13 @@ app.get("/main_page", async (c) => {
     db.select({ count: sql`count(*)`.mapWith(Number) }).from(pagesTable),
     db
       .select({
-        filepath: documentsTable.filepath,
+        user_id: documentsTable.user_id,
+        fileS3Key: documentsTable.fileS3Key,
         created_at: documentsTable.createdAt,
         assigned_tags: documentsTable.assigned_tags,
         banner_img: pagesTable.page_banner_url,
+        spawned_time: documentsTable.spawnedInPipelineIso,
+        encrypted_file_key: documentsTable.encryption_key,
         page_count: sql<number>`(
         select count(*) from ${pagesTable} p2
         where p2.file_id = ${documentsTable.file_id}
@@ -603,10 +706,12 @@ app.get("/main_page", async (c) => {
   c.header("X-Total-Count", String(countRes[0].count));
   c.header("X-Page-Count", String(pageCountRes[0].count));
 
-  const resModed = res.map((file) => ({
-    ...file,
-    banner_img: `${s3BaseUrl}${mainBucket}/${file.banner_img}`,
-  }));
+  const resModed = await Promise.all(
+    res.map(async (file) => ({
+      ...file,
+      banner_img: `${await resolveS3BaseUrl(true)}/${BucketNames.bannerImgs}/${file.banner_img}`,
+    })),
+  );
   return c.json(resModed);
 });
 
@@ -714,13 +819,15 @@ app.get("/pages", async (c) => {
     })
     .from(pagesTable)
     .innerJoin(documentsTable, eq(pagesTable.file_id, documentsTable.file_id))
-    .where(eq(documentsTable.filepath, filepath))
+    .where(eq(documentsTable.fileS3Key, filepath))
     .orderBy(asc(pagesTable.page_idx));
 
-  const resModed = res.map((file) => ({
-    ...file,
-    banner_img: `${s3BaseUrl}${mainBucket}/${file.banner_img}`,
-  }));
+  const resModed = await Promise.all(
+    res.map(async (file) => ({
+      ...file,
+      banner_img: `${await resolveS3BaseUrl(true)}/${BucketNames.bannerImgs}/${file.banner_img}`,
+    })),
+  );
   return c.json({ pages: resModed, total: res.length, filepath });
 });
 
@@ -729,7 +836,7 @@ app.get("/document", async (c) => {
   if (!filepath) return c.json({ error: "Missing filepath" }, 400);
   const res = await db
     .select({
-      filepath: documentsTable.filepath,
+      fileS3Key: documentsTable.fileS3Key,
       created_at: documentsTable.createdAt,
       assigned_tags: documentsTable.assigned_tags,
       file_id: documentsTable.file_id,
@@ -739,7 +846,7 @@ app.get("/document", async (c) => {
         ),
     })
     .from(documentsTable)
-    .where(eq(documentsTable.filepath, filepath))
+    .where(eq(documentsTable.fileS3Key, filepath))
     .limit(1);
   if (!res.length) return c.json({ error: "Not found" }, 404);
   return c.json(res[0]);
@@ -763,9 +870,61 @@ app.post("/check/hash_exists", async (c) => {
   return c.json({ exists });
 });
 
+app.post("/internal/get_file_enc_key", async (c) => {
+  const body = await c.req.json();
+  const fileKey = body.fileKey;
+  if (typeof fileKey !== "string" || !fileKey.trim()) {
+    return c.json({ encKey: "unknown" }, 404);
+  }
+  const encKey: string | null = await getFileEncKeyDb(db, fileKey);
+  if (encKey === null) {
+    return c.json({ encrypted_encryption_key: null }, 404);
+  } else {
+    return c.json({ encrypted_encryption_key: encKey }, 200);
+  }
+});
+
+app.post("/check/user_exists", async (c) => {
+  const body = await c.req.json();
+  const username = body.username;
+  if (typeof username !== "string" || !username.trim())
+    return c.json({ exists: false });
+  const exists = await usernameExistsServer(db, username);
+  return c.json({ exists });
+});
+
 app.post("/upload", async (c) => {
-  const uploadDir = path.join(process.cwd(), "../consume_files");
-  return handleUpload(c, uploadDir);
+  const uploadDir = getConsumePath();
+  const username =
+    c.req.header("X-Username") ?? c.req.header("username") ?? "unknown";
+
+  try {
+    const form = await c.req.formData();
+    const file = form.get("file") as File | null;
+    const relativePath = (form.get("relativePath") as string | null) ?? "";
+
+    if (!file) return c.json({ error: "No file in request" }, 400);
+
+    const safeRelative = relativePath
+      .replace(/\.\./g, "__") // prevent path traversal
+      .replace(/^\/+/, ""); // no leading slash
+
+    const targetPath = safeRelative
+      ? path.join(uploadDir, username, safeRelative)
+      : path.join(uploadDir, username, file.name);
+
+    const targetDir = path.dirname(targetPath);
+    await fs.promises.mkdir(targetDir, { recursive: true });
+
+    const buffer = await file.arrayBuffer();
+    await fs.promises.writeFile(targetPath, Buffer.from(buffer));
+
+    console.log("[UPLOAD] Saved", { targetPath, size: buffer.byteLength });
+    return c.json({ ok: true, path: targetPath });
+  } catch (err: any) {
+    console.error("[UPLOAD] Error", err);
+    return c.json({ error: "Upload failed", detail: err?.message }, 500);
+  }
 });
 
 app.delete("/delete/consume", async (c) => {
@@ -775,7 +934,7 @@ app.delete("/delete/consume", async (c) => {
     const doc = await db
       .select({ file_id: documentsTable.file_id })
       .from(documentsTable)
-      .where(eq(documentsTable.filepath, filepath))
+      .where(eq(documentsTable.fileS3Key, filepath))
       .limit(1);
     if (!doc.length) return c.json({ error: "Document not found" }, 404);
     const fileId = doc[0].file_id;
@@ -798,32 +957,45 @@ app.delete("/delete/consume", async (c) => {
 });
 
 app.get("/download", async (c) => {
-  const filepath = c.req.query("filepath");
-  if (!filepath) return c.json({ error: "Missing filepath query param" }, 400);
- 
+  const fileKey = c.req.query("fileKey");
+  if (!fileKey) return c.json({ error: "Missing filepath query param" }, 400);
+  const bucketName: string = fileKey.endsWith("webp")
+    ? BucketNames.bannerImgs
+    : BucketNames.userUploads;
+
   // Construct the full S3 URL
-  const s3Url = `${s3BaseUrl}${mainBucket}/${filepath}`;
- 
+  const s3Url = `${await resolveS3BaseUrl(true)}${bucketName}/${fileKey}`;
+
   let res: Response;
   try {
     res = await fetch(s3Url);
   } catch (e: any) {
     return c.json({ error: `S3 fetch failed: ${e.message}` }, 502);
   }
- 
+
   if (!res.ok) {
-    return c.json({ error: `S3 returned ${res.status} for ${filepath}` }, res.status as any);
+    return c.json(
+      { error: `S3 returned ${res.status} for ${fileKey}` },
+      res.status as any,
+    );
   }
- 
-  const parts = filepath.split(/[/\\]/);
+
+  const parts = fileKey.split(/[/\\]/);
   const rawName = parts[parts.length - 1];
-  const cleanName = rawName
-    .replace(/-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}(\.[^.]+)$/i, "$1")
-    .replace(/-\d{4}-\d{2}-\d{2}[T_]\d{2}[:\-]\d{2}[:\-]\d{2}[\.\dZ]*(\.[^.]+)$/i, "$1")
-    || rawName;
- 
-  const contentType = res.headers.get("Content-Type") ?? "application/octet-stream";
- 
+  const cleanName =
+    rawName
+      .replace(
+        /-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}(\.[^.]+)$/i,
+        "$1",
+      )
+      .replace(
+        /-\d{4}-\d{2}-\d{2}[T_]\d{2}[:\-]\d{2}[:\-]\d{2}[\.\dZ]*(\.[^.]+)$/i,
+        "$1",
+      ) || rawName;
+
+  const contentType =
+    res.headers.get("Content-Type") ?? "application/octet-stream";
+
   return new Response(res.body, {
     status: 200,
     headers: {
@@ -834,12 +1006,11 @@ app.get("/download", async (c) => {
     },
   });
 });
- 
 
 export default {
   port: parseInt(process.env.PORT ?? "3000"),
   fetch: app.fetch,
   maxRequestBodySize: 5 * 1024 * 1024 * 1024,
-  certFile: path.join(__dirname, "certs", "rain.dms.cert.pem"),
-  keyFile: path.join(__dirname, "certs", "rain.dms.cert-key.pem"),
+  certFile: "/certs/rain.dms.cert.pem",
+  keyFile: "/certs/rain.dms.cert-key.pem",
 };

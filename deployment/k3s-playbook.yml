@@ -15,19 +15,141 @@
     - name: Set proper hostname
       ansible.builtin.hostname:
         name: home-server
+    
+    - name: install deps via apt
+      apt:
+        name:
+          - python3-yaml
+          - python3-kubernetes
+          - iptables
+          - curl
 
     - name: Install K3s server
       ansible.builtin.shell: |
         curl -sfL https://get.k3s.io | \
-        INSTALL_K3S_EXEC="server --node-name home-server" sh -
+        INSTALL_K3S_EXEC="--flannel-backend=none --disable-network-policy" sh -
       args:
         creates: /etc/systemd/system/k3s.service
-
-    - name: Ensure K3s service is running
+    
+    - name: Ensure K3s service is started and enabled
       ansible.builtin.systemd:
         name: k3s
-        enabled: true
         state: started
+        enabled: true
+        daemon_reload: true
+
+    - name: Wait for K3s API to be stable
+      ansible.builtin.shell: |
+        kubectl get --raw /readyz
+      register: result
+      until: result.rc == 0 and result.stdout == "ok"
+      retries: 30
+      delay: 5
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml                 
+
+    - name: Install Helm
+      ansible.builtin.shell: |
+        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+    - name: Wait for K3s API to be ready
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 6443
+        timeout: 120
+
+    - name: Add Calico operator
+      ansible.builtin.shell: |
+        kubectl apply --server-side --force-conflicts --validate=false -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.0/manifests/tigera-operator.yaml
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+    - name: Install Calico
+      ansible.builtin.shell: |
+        cat <<EOF | kubectl apply -f -
+        apiVersion: operator.tigera.io/v1
+        kind: Installation
+        metadata:
+          name: default
+        spec:
+          calicoNetwork:
+            ipPools:
+            - cidr: 10.42.0.0/16
+              encapsulation: VXLAN
+        EOF
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+    - name: Add KEDA Helm repository
+      kubernetes.core.helm_repository:
+        name: kedacore
+        repo_url: https://kedacore.github.io/charts
+        state: present
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+    - name: Add Kyverno Helm repository
+      kubernetes.core.helm_repository:
+        name: kyverno
+        repo_url: https://kyverno.github.io/kyverno/
+        state: present
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+    - name: Create keda namespace
+      kubernetes.core.k8s:
+        api_version: v1
+        kind: Namespace
+        name: keda
+        state: present
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+    - name: Create KEDA CA configmap
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: custom-ca
+            namespace: keda
+          data:
+            ca.crt: "{{ lookup('file', '../docker/certs/rootCA.pem') }}"
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+    - name: Install Keda via Helm
+      kubernetes.core.helm:
+        name: keda
+        chart_ref: kedacore/keda
+        release_namespace: keda
+        create_namespace: true
+        update_repo_cache: true
+        values:
+          extraVolumes:
+            - name: custom-ca
+              configMap:
+                name: custom-ca
+          extraVolumeMounts:
+            - name: custom-ca
+              mountPath: /etc/keda/tls/ca.crt
+              subPath: ca.crt
+          env:
+            - name: SSL_CERT_FILE
+              value: /etc/keda/tls/ca.crt
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+    - name: Install Kyverno via Helm
+      kubernetes.core.helm:
+        name: kyverno
+        chart_ref: kyverno/kyverno
+        release_namespace: kyverno
+        create_namespace: true
+        update_repo_cache: true
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
     - name: Wait for node token
       ansible.builtin.wait_for:
@@ -52,6 +174,17 @@
       ansible.builtin.command: k3s --version
       register: k3s_version
       changed_when: false
+
+    - name: Fetch kubeconfig from orchestrator
+      ansible.builtin.fetch:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: ./kubeconfig
+        flat: true
+    - name: Replace localhost in kubeconfig
+      ansible.builtin.replace:
+        path: /etc/rancher/k3s/k3s.yaml
+        regexp: "https://127.0.0.1:6443"
+        replace: "https://{{ orchestrator_ip }}:6443"
 
     - name: Show K3s server version
       ansible.builtin.debug:

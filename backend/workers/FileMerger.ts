@@ -1,8 +1,18 @@
 // workers/FileMerger.ts
 import { drizzle } from "drizzle-orm/node-postgres";
-import { OcrResult, QueueNames } from "../utils/types/main";
-import { QueueHandler, PermanentFailureError } from "./QueueConnector";
-import { documentsTable, pagesTable } from "../db/schema";
+import { eq } from "drizzle-orm";
+import {
+  OcrResult,
+  QueueNames,
+  QueueObjProcessOcrResult,
+} from "../utils/types/main";
+import { QueueHandler, PermanentFailureError } from "../utils/helperClasses/QueueConnector";
+import {
+  documentsTable,
+  fileKeyTempTable,
+  pagesTable,
+  usersTable,
+} from "../db/schema";
 import dotenv from "dotenv";
 import { Pool } from "pg";
 
@@ -42,14 +52,14 @@ export class FileMerger {
       1, // prefetch
     );
 
-    await this.queueHandler.addQueueOnReceive<OcrResult>(
+    await this.queueHandler.addQueueOnReceive<QueueObjProcessOcrResult>(
       QueueNames.consumeOcrOutput,
-      async (file: OcrResult) => {
+      async (file: QueueObjProcessOcrResult) => {
         try {
           await this.mergeFile(file);
         } catch (error) {
           this.log("ERROR", "Failed to merge file", {
-            fileHash: file.fileHash,
+            fileHash: file.result.fileHash,
             error:
               error instanceof Error
                 ? { name: error.name, message: error.message }
@@ -68,12 +78,12 @@ export class FileMerger {
     });
   }
 
-  async mergeFile(file: OcrResult) {
+  async mergeFile(res: QueueObjProcessOcrResult) {
     const started = Date.now();
+    const file: OcrResult = res.result;
+
     this.log("INFO", "OCR file received", {
-      fileHash: file.fileHash,
-      filepath: file.originalFilePath,
-      pages: file.pages?.length ?? 0,
+      res,
     });
 
     if (!file.pages?.length) {
@@ -81,8 +91,8 @@ export class FileMerger {
         `No OCR pages for ${file.originalFilePath}`,
       );
     }
-    function generateTags(filepath: string, basePath: string): string[] {
-      let rawChunks: string[] = filepath
+    function generateTags(s3Key: string, basePath: string): string[] {
+      let rawChunks: string[] = s3Key
         .split("/")
         .filter((chunk) => !chunk.includes(".") && chunk.trim().length > 0);
       const baseChunks: string[] = basePath
@@ -93,18 +103,33 @@ export class FileMerger {
       return rawChunks;
     }
     const tags: string[] = generateTags(
-      file.pages[0].bannerImgpath,
+      res.originalConsumePath,
       process.env.CONSUME_PATH ?? "",
     );
+    const dbRes = await this.db
+      .select({ userId: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.username, res.username));
+    const user_id = dbRes.length > 0 ? dbRes[0].userId : null;
+
+    const _: { key: string }[] = await this.db
+      .select({ key: fileKeyTempTable.encryptionKey })
+      .from(fileKeyTempTable)
+      .where(eq(fileKeyTempTable.fileS3Key, res.originalFileKey))
+      .limit(1);
+    const encKey: string | null = _.length > 0 ? _[0].key : null;
 
     const currentDate = new Date();
     const inserted = await this.db
       .insert(documentsTable)
       .values({
-        filepath: file.originalFilePath,
+        user_id: user_id,
+        fileS3Key: file.originalFilePath,
         createdAt: currentDate,
         assigned_tags: tags,
         fileHash: file.fileHash,
+        spawnedInPipelineIso: res.spawnedTime,
+        encryption_key: encKey,
       })
       .onConflictDoNothing()
       .returning({ file_id: documentsTable.file_id });

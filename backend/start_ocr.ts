@@ -1,7 +1,5 @@
 import path from "path";
-import { FileMerger } from "./workers/FileMerger";
 import { FileProcessor } from "./workers/FileProcessor";
-import { FileWatcher } from "./workers/FileWatcher";
 import "dotenv/config";
 import { ImportantDirs } from "./utils/types/main";
 import { fileURLToPath } from "url";
