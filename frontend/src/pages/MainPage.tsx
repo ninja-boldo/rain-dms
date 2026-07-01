@@ -5,6 +5,7 @@ import DocumentCard from "../components/DocumentCard";
 import FileTree from "../components/FileTree";
 import { useSettingsStore } from "../store/settings";
 import { useUploadStore } from "../store/uploads";
+import { reportSuccess } from "../store/toast";
 import { useI18n } from "../i18n";
 
 type ViewMode = "grid" | "tree";
@@ -45,13 +46,14 @@ function sortDocs(docs: Document[], sort: SortKey): Document[] {
   }
 }
 
-const LIMIT = 48;
+const PAGE_SIZE = 100;
 
 export default function MainPage() {
   const t = useI18n();
   const [docs, setDocs] = useState<Document[]>([]);
   const [total, setTotal] = useState(0);
-  const [pageIdx, setPageIdx] = useState(0);
+  const [nextPageIdx, setNextPageIdx] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
   const [tags, setTags] = useState<TagEntry[]>([]);
   const [activeTag, setActiveTag] = useState<string | undefined>();
   const [view, setView] = useState<ViewMode>("grid");
@@ -59,6 +61,7 @@ export default function MainPage() {
   const [fileFilter, setFileFilter] = useState("");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Bulk delete
@@ -71,19 +74,48 @@ export default function MainPage() {
   // Re-fetch when uploads complete
   const lastCompletedAt = useUploadStore((s) => s.lastCompletedAt);
 
+  const loadingRef = useRef(false);
+
+  // Reset and fetch page 0 whenever the tag filter changes or an upload finishes.
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    loadingRef.current = true;
     try {
-      const res = await getMainPage(pageIdx, LIMIT, activeTag);
+      const res = await getMainPage(0, PAGE_SIZE, activeTag);
       setDocs(res.data);
       setTotal(res.totalCount);
+      setNextPageIdx(1);
+      setHasMore(res.data.length < res.totalCount);
     } catch (e: any) {
       setError(e.message);
     } finally {
       setLoading(false);
+      loadingRef.current = false;
     }
-  }, [pageIdx, activeTag]);
+  }, [activeTag]);
+
+  // Infinite scroll — fetch the next chunk and append.
+  const loadMore = useCallback(async () => {
+    if (loadingRef.current || !hasMore) return;
+    loadingRef.current = true;
+    setLoadingMore(true);
+    try {
+      const res = await getMainPage(nextPageIdx, PAGE_SIZE, activeTag);
+      setDocs((prev) => {
+        const seen = new Set(prev.map((d) => d.fileS3Key));
+        return [...prev, ...res.data.filter((d) => !seen.has(d.fileS3Key))];
+      });
+      setTotal(res.totalCount);
+      setNextPageIdx((i) => i + 1);
+      setHasMore((nextPageIdx + 1) * PAGE_SIZE < res.totalCount && res.data.length > 0);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoadingMore(false);
+      loadingRef.current = false;
+    }
+  }, [nextPageIdx, hasMore, activeTag]);
 
   useEffect(() => {
     load();
@@ -94,7 +126,31 @@ export default function MainPage() {
       .catch(() => {});
   }, []);
 
-  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
+  // Tree view needs the *complete* document set to build an accurate folder
+  // hierarchy — a partial page would silently hide whole subfolders. Rather
+  // than paginate it, keep pulling subsequent chunks in the background until
+  // everything is loaded, independent of scroll position.
+  useEffect(() => {
+    if (view !== "tree" || !hasMore || loading) return;
+    const id = setTimeout(() => loadMore(), 60);
+    return () => clearTimeout(id);
+  }, [view, hasMore, loading, docs.length, loadMore]);
+
+  // Infinite-scroll sentinel for grid/list views.
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (view === "tree") return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) loadMore();
+      },
+      { rootMargin: "600px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [view, loadMore]);
 
   const filtered = sortDocs(docs, sort).filter((d) => {
     if (!fileFilter) return true;
@@ -128,16 +184,19 @@ export default function MainPage() {
     }
     setDeleting(true);
     const keys = [...selected];
+    let ok = 0;
     for (const key of keys) {
       try {
         await deleteDocument(key);
+        ok++;
       } catch {
-        /* continue */
+        /* apiFetch already surfaced a toast with the real error */
       }
     }
     setDeleting(false);
     clearSelection();
     load();
+    if (ok > 0) reportSuccess(t.toast_success, `${ok}/${keys.length}`);
   }
 
   return (
@@ -171,10 +230,7 @@ export default function MainPage() {
               label={t.main_all}
               count={total}
               active={!activeTag}
-              onClick={() => {
-                setActiveTag(undefined);
-                setPageIdx(0);
-              }}
+              onClick={() => setActiveTag(undefined)}
             />
             {tags.map((tag) => (
               <TagBtn
@@ -182,10 +238,7 @@ export default function MainPage() {
                 label={tag.tag}
                 count={tag.doc_count}
                 active={activeTag === tag.tag}
-                onClick={() => {
-                  setActiveTag(tag.tag);
-                  setPageIdx(0);
-                }}
+                onClick={() => setActiveTag(tag.tag)}
               />
             ))}
           </div>
@@ -253,9 +306,9 @@ export default function MainPage() {
               color: bulkMode ? "var(--accent)" : "var(--text-2)",
               borderColor: bulkMode ? "var(--accent)" : undefined,
             }}
-            title="Bulk select"
+            title={t.main_select}
           >
-            ☑ Select
+            ☑ {t.main_select}
           </button>
 
           {/* Bulk actions */}
@@ -268,13 +321,13 @@ export default function MainPage() {
                   fontFamily: "JetBrains Mono, monospace",
                 }}
               >
-                {selected.size} selected
+                {t.main_selected(selected.size)}
               </span>
               <button onClick={selectAll} style={toolBtn}>
-                all {filtered.length}
+                {t.main_allOnPage(filtered.length)}
               </button>
               <button onClick={clearSelection} style={toolBtn}>
-                none
+                {t.main_none}
               </button>
               <button
                 onClick={bulkDelete}
@@ -289,14 +342,14 @@ export default function MainPage() {
                 }}
               >
                 {deleting
-                  ? "…"
+                  ? t.main_deleting
                   : deleteConfirm
-                    ? `⚠ Confirm delete ${selected.size}`
-                    : `✗ Delete ${selected.size}`}
+                    ? t.ft_confirmDelete(selected.size)
+                    : `✗ ${t.ft_delete(selected.size)}`}
               </button>
               {deleteConfirm && (
                 <button onClick={() => setDeleteConfirm(false)} style={toolBtn}>
-                  cancel
+                  {t.main_cancel}
                 </button>
               )}
             </div>
@@ -510,49 +563,51 @@ export default function MainPage() {
               sortKey={sort as any}
               selectedPath={selectedPath}
               onSelect={(d) => setSelectedPath(d?.fileS3Key ?? null)}
+              onChanged={load}
             />
+          )}
+
+          {/* Infinite-scroll sentinel — fetches the next chunk when it enters view */}
+          {view !== "tree" && hasMore && (
+            <div ref={sentinelRef} style={{ height: 1 }} />
           )}
         </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
+        {/* Status footer — infinite scroll, no page numbers */}
+        {(docs.length > 0 || loadingMore) && (
           <div
             style={{
-              padding: "6px 16px",
+              padding: "5px 16px",
               borderTop: "1px solid var(--border)",
               display: "flex",
               alignItems: "center",
-              gap: 8,
               justifyContent: "center",
+              gap: 6,
               flexShrink: 0,
               background: "var(--bg-surface)",
+              fontSize: "0.68rem",
+              color: "var(--text-3)",
+              fontFamily: "JetBrains Mono, monospace",
             }}
           >
-            <button
-              className="btn btn-ghost"
-              disabled={pageIdx === 0}
-              onClick={() => setPageIdx((p) => p - 1)}
-              style={{ padding: "3px 10px" }}
-            >
-              ←
-            </button>
-            <span
-              style={{
-                fontSize: "0.77rem",
-                color: "var(--text-2)",
-                fontFamily: "JetBrains Mono, monospace",
-              }}
-            >
-              {pageIdx + 1} / {totalPages}
-            </span>
-            <button
-              className="btn btn-ghost"
-              disabled={pageIdx >= totalPages - 1}
-              onClick={() => setPageIdx((p) => p + 1)}
-              style={{ padding: "3px 10px" }}
-            >
-              →
-            </button>
+            {loadingMore ? (
+              <>
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: "var(--accent)",
+                    animation: "pulse 0.9s ease-in-out infinite",
+                  }}
+                />
+                {t.main_loadingMore}
+              </>
+            ) : hasMore ? (
+              t.main_loadedOf(docs.length, total)
+            ) : (
+              t.main_loadedAll(docs.length)
+            )}
           </div>
         )}
       </div>

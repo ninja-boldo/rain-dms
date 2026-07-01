@@ -2,6 +2,7 @@ import "dotenv/config";
 import { eq } from "drizzle-orm";
 
 import fs from "fs";
+import os from "os";
 
 import path from "node:path";
 import { QueueHandler } from "../helperClasses/QueueConnector";
@@ -11,13 +12,8 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createWriteStream } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { ApiPaths } from "../types/main";
-import {
-  getApiBaseUrl,
-  getClientIp,
-  getNginxPort,
-  getServerIp,
-} from "../trust/envHelpers";
+import { ApiPaths, OsType, S3ReturnObj } from "../types/main";
+import { getApiBaseUrl, getClientIp } from "../trust/envHelpers";
 import { getAuthHeader } from "../trust/auth";
 
 const ALLOWED_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg", ".webp"];
@@ -28,6 +24,45 @@ const ALLOWED_MIME = [
   "image/jpeg",
   "image/webp",
 ];
+
+export function mockS3Objs(elementCount: number): S3ReturnObj[] {
+  const objs: S3ReturnObj[] = [];
+  for (let i = 0; i < elementCount; i++) {
+    objs.push({ s3Key: "asante", spawnedTimeIso: "karibo" });
+  }
+  return objs;
+}
+
+export function detectOS(): OsType {
+  const platform = os.platform();
+
+  switch (platform) {
+    case "linux":
+      return OsType.Linux;
+
+    case "win32":
+      return OsType.Windows;
+
+    case "darwin":
+      return OsType.MacOS;
+
+    default:
+      return OsType.Unknown;
+  }
+}
+
+export function chunkArray<T>(array: T[], chunkSize: number): T[][] {
+  const chunks: T[][] = [];
+  let i = 0;
+
+  while (i < array.length) {
+    // slice(start, end) extracts elements without mutating the original array
+    chunks.push(array.slice(i, i + chunkSize));
+    i += chunkSize;
+  }
+
+  return chunks;
+}
 
 export function isAllowedFile(file: File) {
   const lower = file.name.toLowerCase();

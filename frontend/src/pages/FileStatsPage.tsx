@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { getDocument, getPages } from "../api/client";
 import type { Document } from "../api/client";
 import { useLocalStore, type LocalMarker } from "../store/localData";
+import { useI18n } from "../i18n";
+import { reportSuccess } from "../store/toast";
 
 function cleanFileName(key: string): string {
   if (!key) return "";
@@ -51,10 +53,28 @@ function toDatetimeLocal(iso: string | null | undefined): string {
   )}:${pad(d.getMinutes())}`;
 }
 
+/** Duration between pipeline spawn and doc creation — "how long did OCR/ingest actually take". */
+function fmtDuration(
+  fromIso: string | null | undefined,
+  toIso: string | null | undefined,
+): string | null {
+  if (!fromIso || !toIso) return null;
+  const from = new Date(fromIso).getTime();
+  const to = new Date(toIso).getTime();
+  if (Number.isNaN(from) || Number.isNaN(to)) return null;
+  const diffMs = to - from;
+  if (diffMs < 0) return null;
+  if (diffMs < 1000) return `${diffMs}ms`;
+  if (diffMs < 60_000) return `${(diffMs / 1000).toFixed(1)}s`;
+  if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m ${Math.round((diffMs % 60_000) / 1000)}s`;
+  return `${Math.floor(diffMs / 3_600_000)}h ${Math.floor((diffMs % 3_600_000) / 60_000)}m`;
+}
+
 interface Stats {
   doc: Document | null;
   pageCount: number;
   totalBoxes: number;
+  pagesWithOcr: number;
 }
 
 function countOcrBoxes(pages: { ocr: any }[]): number {
@@ -83,7 +103,12 @@ function countOcrBoxes(pages: { ocr: any }[]): number {
   return n;
 }
 
+function countPagesWithOcr(pages: { ocr: any }[]): number {
+  return pages.filter((p) => countOcrBoxes([p]) > 0).length;
+}
+
 export default function FileStatsPage() {
+  const t = useI18n();
   const [searchParams] = useSearchParams();
   const nav = useNavigate();
   const filepath = searchParams.get("filepath") ?? "";
@@ -107,6 +132,7 @@ export default function FileStatsPage() {
           doc: d,
           pageCount: p.pages.length,
           totalBoxes: countOcrBoxes(p.pages),
+          pagesWithOcr: countPagesWithOcr(p.pages),
         });
       })
       .catch((e: any) => setError(e.message))
@@ -145,7 +171,7 @@ export default function FileStatsPage() {
   function clearMarkers() {
     if (
       typeof window !== "undefined" &&
-      !window.confirm("Remove all markers on this file?")
+      !window.confirm(t.fs_removeAllConfirm)
     )
       return;
     setMarkers([]);
@@ -154,9 +180,9 @@ export default function FileStatsPage() {
   if (!filepath) {
     return (
       <div style={{ padding: 24 }}>
-        <p style={{ color: "var(--danger)" }}>Missing filepath.</p>
+        <p style={{ color: "var(--danger)" }}>{t.fs_missing}</p>
         <button className="btn btn-ghost" onClick={() => nav(-1)}>
-          ← Back
+          {t.fs_back}
         </button>
       </div>
     );
@@ -190,7 +216,7 @@ export default function FileStatsPage() {
           onClick={() => nav(-1)}
           style={{ padding: "3px 8px", fontSize: "0.78rem" }}
         >
-          ← Back
+          {t.fs_back}
         </button>
         <button
           className="btn btn-ghost"
@@ -199,7 +225,7 @@ export default function FileStatsPage() {
           }
           style={{ padding: "3px 8px", fontSize: "0.78rem" }}
         >
-          Open document
+          {t.fs_open}
         </button>
         <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
           <p
@@ -236,7 +262,7 @@ export default function FileStatsPage() {
 
       <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px" }}>
         {loading && !stats && (
-          <p style={{ color: "var(--text-3)" }}>Loading…</p>
+          <p style={{ color: "var(--text-3)" }}>{t.fs_loading}</p>
         )}
         {error && (
           <p
@@ -263,44 +289,95 @@ export default function FileStatsPage() {
                 marginBottom: 18,
               }}
             >
-              <StatCard label="Pages" value={String(stats.pageCount)} />
+              <StatCard label={t.fs_pages} value={String(stats.pageCount)} />
               <StatCard
-                label="OCR boxes"
+                label={t.fs_ocrBoxes}
                 value={stats.totalBoxes.toLocaleString()}
               />
               <StatCard
-                label="Markers"
+                label={t.fs_markers}
                 value={String(markers.length)}
                 accent={markers.length > 0}
               />
               <StatCard
-                label="Tags"
+                label={t.fs_tags}
                 value={String(doc?.assigned_tags?.length ?? 0)}
               />
               <StatCard
-                label="Encrypted"
-                value={(doc as any)?.encrypted_file_key ? "yes" : "no"}
+                label={t.fs_encrypted}
+                value={(doc as any)?.encrypted_file_key ? t.fs_yes : t.fs_no}
               />
             </div>
 
-            <Section title="Ingest timeline">
+            <Section title={t.fs_timeline}>
               <KV
-                label="Created at"
+                label={t.fs_created}
                 value={fmtDate(doc?.created_at)}
                 hint={fmtRel(doc?.created_at)}
               />
+              {(doc as any)?.spawned_time && (
+                <KV
+                  label={t.fs_pipelineAt}
+                  value={fmtDate((doc as any).spawned_time)}
+                  hint={
+                    fmtDuration((doc as any).spawned_time, doc?.created_at)
+                      ? `${fmtRel((doc as any).spawned_time)} · ${fmtDuration((doc as any).spawned_time, doc?.created_at)}`
+                      : fmtRel((doc as any).spawned_time)
+                  }
+                />
+              )}
               <KV
-                label="File ID"
+                label={t.fs_ocrPages}
+                value={`${stats.pagesWithOcr} / ${stats.pageCount}`}
+                hint={
+                  stats.pageCount > 0
+                    ? `${Math.round((stats.pagesWithOcr / stats.pageCount) * 100)}%`
+                    : undefined
+                }
+              />
+              <KV
+                label={t.fs_fileId}
                 value={doc?.file_id != null ? String(doc.file_id) : "—"}
+              />
+              <KV
+                label={t.fs_path}
+                value={
+                  <button
+                    onClick={() => {
+                      if (filepath) {
+                        navigator.clipboard?.writeText(filepath).catch(() => {});
+                        reportSuccess(t.toast_success, filepath);
+                      }
+                    }}
+                    title={filepath}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                      color: "var(--text-2)",
+                      fontFamily: "JetBrains Mono, monospace",
+                      fontSize: "0.72rem",
+                      textAlign: "left",
+                      maxWidth: 340,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      display: "block",
+                    }}
+                  >
+                    {filepath} ⧉
+                  </button>
+                }
               />
               {doc?.assigned_tags && doc.assigned_tags.length > 0 && (
                 <KV
-                  label="Tags"
+                  label={t.fs_tags}
                   value={
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                      {doc.assigned_tags.map((t) => (
-                        <span key={t} className="tag">
-                          {t}
+                      {doc.assigned_tags.map((tag) => (
+                        <span key={tag} className="tag">
+                          {tag}
                         </span>
                       ))}
                     </div>
@@ -310,7 +387,7 @@ export default function FileStatsPage() {
             </Section>
 
             <Section
-              title="Reminder"
+              title={t.fs_reminder}
               right={
                 reminder.at && !reminder.done_at ? (
                   <span
@@ -320,7 +397,7 @@ export default function FileStatsPage() {
                       fontWeight: 600,
                     }}
                   >
-                    ACTIVE
+                    {t.fs_active}
                   </span>
                 ) : reminder.done_at ? (
                   <span
@@ -330,11 +407,11 @@ export default function FileStatsPage() {
                       fontWeight: 600,
                     }}
                   >
-                    DONE
+                    {t.fs_done}
                   </span>
                 ) : (
                   <span style={{ color: "var(--text-3)", fontSize: "0.7rem" }}>
-                    none
+                    {t.fs_no}
                   </span>
                 )
               }
@@ -357,7 +434,7 @@ export default function FileStatsPage() {
                 <input
                   type="text"
                   className="input"
-                  placeholder="Note (optional)"
+                  placeholder={t.fs_reminderNote}
                   value={reminderNote}
                   onChange={(e) => setReminderNote(e.target.value)}
                   style={{ flex: 1, minWidth: 200, fontSize: "0.78rem" }}
@@ -367,7 +444,7 @@ export default function FileStatsPage() {
                   onClick={saveReminder}
                   style={{ fontSize: "0.78rem" }}
                 >
-                  Save reminder
+                  {t.fs_saveReminder}
                 </button>
                 <button
                   className="btn btn-ghost"
@@ -375,7 +452,7 @@ export default function FileStatsPage() {
                   disabled={!reminder.at}
                   style={{ fontSize: "0.78rem" }}
                 >
-                  Mark done
+                  {t.fs_markDone}
                 </button>
                 <button
                   className="btn btn-ghost"
@@ -383,7 +460,7 @@ export default function FileStatsPage() {
                   disabled={!reminder.at && !reminder.note}
                   style={{ fontSize: "0.78rem" }}
                 >
-                  Clear
+                  {t.st_clear}
                 </button>
               </div>
               {reminder.at && (
@@ -396,7 +473,7 @@ export default function FileStatsPage() {
                 >
                   {fmtDate(reminder.at)}
                   {reminder.done_at && (
-                    <> · marked done {fmtRel(reminder.done_at)}</>
+                    <> · {t.fs_done.toLowerCase()} {fmtRel(reminder.done_at)}</>
                   )}
                 </p>
               )}
@@ -407,13 +484,12 @@ export default function FileStatsPage() {
                   color: "var(--text-3)",
                 }}
               >
-                Reminders live in your browser's localStorage. They don't sync
-                across devices.
+                {t.fs_reminderHint}
               </p>
             </Section>
 
             <Section
-              title={`Markers (${markers.length})`}
+              title={t.fs_markersTitle(markers.length)}
               right={
                 markers.length > 0 ? (
                   <button
@@ -421,7 +497,7 @@ export default function FileStatsPage() {
                     onClick={clearMarkers}
                     style={{ fontSize: "0.7rem", padding: "3px 8px" }}
                   >
-                    Remove all
+                    {t.fs_removeAll}
                   </button>
                 ) : undefined
               }
@@ -434,9 +510,7 @@ export default function FileStatsPage() {
                     color: "var(--text-3)",
                   }}
                 >
-                  No markers yet. Open the document, switch to <b>✎ Mark</b>{" "}
-                  mode, double-click an OCR box or drag a rectangle to create
-                  one.
+                  {t.fs_noMarkers}
                 </p>
               ) : (
                 <div
@@ -483,7 +557,7 @@ export default function FileStatsPage() {
                             textTransform: "uppercase",
                           }}
                         >
-                          {m.kind === "drawn" ? "drawn" : "ocr"}
+                          {m.kind === "drawn" ? t.fs_drawn : t.fs_ocr}
                         </span>
                         <span
                           style={{
@@ -492,7 +566,7 @@ export default function FileStatsPage() {
                             fontFamily: "JetBrains Mono, monospace",
                           }}
                         >
-                          page {m.page_idx + 1}
+                          {t.fs_pageN(m.page_idx + 1)}
                         </span>
                       </div>
                       {m.note && (
@@ -516,7 +590,7 @@ export default function FileStatsPage() {
                           fontFamily: "JetBrains Mono, monospace",
                         }}
                       >
-                        x:{m.x} y:{m.y} · {m.w}×{m.h}
+                        {t.fs_xy(m.x, m.y, m.w, m.h)}
                       </p>
                       <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
                         <button
@@ -532,7 +606,7 @@ export default function FileStatsPage() {
                             flex: 1,
                           }}
                         >
-                          Open
+                          {t.fs_openBtn}
                         </button>
                         <button
                           className="btn btn-danger"

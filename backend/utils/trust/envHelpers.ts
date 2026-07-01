@@ -18,6 +18,14 @@ export function getEncryptAtRestIsTrue(): boolean {
   return true; // default to do encryption
 }
 
+export function getIsDebugAuthEnabled(): boolean {
+  const DEBUG_AUTH = process.env.DEBUG_AUTH ?? "false";
+  if (DEBUG_AUTH.trim() === "true") {
+    return true;
+  }
+  return false; // default to false
+}
+
 export function getMainEncryptionKey(): string {
   // this is meant to encrypt all file keys while not being able to be used
   // as access token

@@ -1,5 +1,8 @@
 import { useAuthStore } from "../store/auth";
 import { useSettingsStore } from "../store/settings";
+import { reportError, reportInfo } from "../store/toast";
+import { getI18n } from "../i18n";
+import { applyUrlSubstitutions } from "../utils/urlSubstitution";
 
 export type {
   Document,
@@ -43,6 +46,7 @@ export function handleUnauth(status: number) {
   const { token, logout } = useAuthStore.getState();
   if (!token) return;
   logout();
+  reportInfo(getI18n().toast_info, getI18n().err_unauth);
   if (
     typeof window !== "undefined" &&
     !window.location.pathname.startsWith("/login")
@@ -54,20 +58,49 @@ export function handleUnauth(status: number) {
   }
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * Options for apiFetch.
+ * `silent` skips the toast — used for calls that are expected to fail
+ * routinely (e.g. per-file duplicate-hash checks during upload) where the
+ * calling code already has its own, more specific way of surfacing errors.
+ */
+interface FetchOpts {
+  silent?: boolean;
+}
+
+async function apiFetch<T>(
+  path: string,
+  init?: RequestInit,
+  opts?: FetchOpts,
+): Promise<T> {
   const url = `${baseUrl()}${path}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders(),
-      ...(init?.headers as Record<string, string>),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders(),
+        ...(init?.headers as Record<string, string>),
+      },
+    });
+  } catch (networkErr: any) {
+    if (!opts?.silent) {
+      reportError(getI18n().toast_error, `${getI18n().err_network} — ${path}`);
+    }
+    throw networkErr instanceof Error
+      ? networkErr
+      : new Error(getI18n().err_network);
+  }
   if (!res.ok) {
     handleUnauth(res.status);
     const text = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+    const message = `HTTP ${res.status}${text ? `: ${text.slice(0, 200)}` : ""}`;
+    // 401/403 already surfaced via handleUnauth's own toast — don't double up.
+    if (!opts?.silent && res.status !== 401 && res.status !== 403) {
+      reportError(getI18n().toast_error, message);
+    }
+    throw new Error(message);
   }
   return res.json() as Promise<T>;
 }
@@ -112,9 +145,18 @@ export async function getMainPage(
   if (tag) p.set("tag", tag);
 
   const url = `${baseUrl()}/main_page?${p}`;
-  const res = await fetch(url, { headers: authHeaders() });
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: authHeaders() });
+  } catch (e: any) {
+    reportError(getI18n().toast_error, getI18n().err_network);
+    throw e instanceof Error ? e : new Error(getI18n().err_network);
+  }
   if (!res.ok) {
     handleUnauth(res.status);
+    if (res.status !== 401 && res.status !== 403) {
+      reportError(getI18n().toast_error, `HTTP ${res.status}`);
+    }
     throw new Error(`HTTP ${res.status}`);
   }
 
@@ -154,10 +196,11 @@ export const deleteDocument = (filepath: string) =>
   );
 
 export const checkHashExists = (hash: string) =>
-  apiFetch<{ exists: boolean }>("/check/hash_exists", {
-    method: "POST",
-    body: JSON.stringify({ hash }),
-  });
+  apiFetch<{ exists: boolean }>(
+    "/check/hash_exists",
+    { method: "POST", body: JSON.stringify({ hash }) },
+    { silent: true },
+  );
 
 // ── upload ────────────────────────────────────────────────────────────────────
 
@@ -184,7 +227,7 @@ export async function uploadFile(
 // ── binary / image fetch with auth ───────────────────────────────────────────
 
 export async function fetchBinary(url: string): Promise<Response> {
-  const res = await fetch(url, { headers: authHeaders() });
+  const res = await fetch(applyUrlSubstitutions(url), { headers: authHeaders() });
   if (!res.ok) handleUnauth(res.status);
   return res;
 }
@@ -194,5 +237,7 @@ export async function fetchBinary(url: string): Promise<Response> {
  * Previous code sent "?filepath=…" which caused 400 errors on every download.
  */
 export function buildDownloadUrl(filepath: string): string {
-  return `${baseUrl()}/download?fileKey=${encodeURIComponent(filepath)}`;
+  return applyUrlSubstitutions(
+    `${baseUrl()}/download?fileKey=${encodeURIComponent(filepath)}`,
+  );
 }

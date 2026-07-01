@@ -8,19 +8,29 @@ import { BucketNames, QueueNames, QueueObjStartOcr } from "../utils/types/main";
 import fs from "fs";
 import os from "os";
 import { S3Client } from "@aws-sdk/client-s3";
+import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
+import path from "path";
 import {
   encryptFileStream,
   encryptTxt,
   generateKey,
   hashFile,
-} from "../utils/cryptography";
-import { Pool } from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
-import path from "path";
-import { dumpFileKeyPairInDb, fileHashAlreadyExistingApi } from "../utils/utils";
-import { formatFilename, getUsernameFromConsumeDbChecked, sanitizeS3Key } from "../utils/pathHelpers";
-import { getEncryptAtRestIsTrue, getMainEncryptionKey } from "../utils/envHelpers";
-import { getS3Client, uploadGenericS3 } from "../utils/s3Helpers";
+} from "../utils/trust/cryptography";
+import {
+  dumpFileKeyPairInDb,
+  fileHashAlreadyExistingApi,
+} from "../utils/other/utils";
+import {
+  getEncryptAtRestIsTrue,
+  getMainEncryptionKey,
+} from "../utils/trust/envHelpers";
+import {
+  formatFilename,
+  getUsernameFromConsumeDbChecked,
+  sanitizeS3Key,
+} from "../utils/other/pathHelpers";
+import { getS3Client, uploadGenericS3 } from "../utils/other/s3Helpers";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config

@@ -279,16 +279,16 @@ function FlatHit({
       }
       onClick={onJump}
     >
-      {hit.banner_img && (
+      {hit.pageIdx === 0 && hit.banner_img && (
         <div
-          style={{ width: 80, flexShrink: 0, background: "var(--bg-raised)" }}
+          style={{ width: 56, height: 80, flexShrink: 0, background: "var(--bg-raised)" }}
         >
           <AuthImage
             src={hit.banner_img}
             alt=""
             style={{
-              width: "100%",
-              height: "100%",
+              width: 56,
+              height: 80,
               objectFit: "cover",
               display: "block",
             }}
@@ -470,6 +470,37 @@ export default function SearchPage() {
   const [grouped, setGrouped] = useState(true);
   const apiUrl = useSettingsStore((s) => s.apiUrl);
 
+  const RECENT_KEY = "rain-dms-recent-searches";
+  const [recent, setRecent] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(RECENT_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  function pushRecent(q: string) {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    setRecent((prev) => {
+      const next = [trimmed, ...prev.filter((r) => r !== trimmed)].slice(0, 8);
+      try {
+        localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
+  function clearRecent() {
+    setRecent([]);
+    try {
+      localStorage.removeItem(RECENT_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+
   // Construct proper banner URL — search hits have raw filenames from MeiliSearch
   function resolveBannerUrl(raw: string | null | undefined): string | null {
     if (!raw) return null;
@@ -505,12 +536,24 @@ export default function SearchPage() {
       const res = await searchDocuments(effective, extra);
       setResult(res);
       setParams({ q: effective }, { replace: true });
+      pushRecent(effective);
     } catch (e: any) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
   }
+
+  // Debounced live search — fires ~450ms after typing stops, in addition to
+  // explicit submit. Skips very short queries to avoid noisy calls.
+  useEffect(() => {
+    if (!query.trim() || query.trim().length < 2) return;
+    const handle = setTimeout(() => {
+      doSearch(query, activeTag);
+    }, 450);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
 
   useEffect(() => {
     const q = params.get("q");
@@ -650,6 +693,66 @@ export default function SearchPage() {
               {loading ? "…" : t.sr_search}
             </button>
           </form>
+
+          {/* Recent searches */}
+          {!query && !result && recent.length > 0 && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                flexWrap: "wrap",
+                marginTop: 9,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "0.66rem",
+                  color: "var(--text-3)",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                {t.sr_recent}
+              </span>
+              {recent.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => {
+                    setQuery(r);
+                    doSearch(r);
+                  }}
+                  style={{
+                    background: "var(--bg-raised)",
+                    border: "1px solid var(--border-soft)",
+                    borderRadius: 999,
+                    cursor: "pointer",
+                    color: "var(--text-2)",
+                    fontSize: "0.7rem",
+                    padding: "2px 10px",
+                    fontFamily: "JetBrains Mono, monospace",
+                  }}
+                >
+                  {r}
+                </button>
+              ))}
+              <button
+                onClick={clearRecent}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--text-3)",
+                  fontSize: "0.68rem",
+                  textDecoration: "underline",
+                  padding: "2px 4px",
+                }}
+              >
+                {t.sr_clearRecent}
+              </button>
+            </div>
+          )}
 
           {/* Date filters */}
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>

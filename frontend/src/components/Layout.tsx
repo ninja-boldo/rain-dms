@@ -1,16 +1,22 @@
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { useAuthStore } from "../store/auth";
 import { useSettingsStore } from "../store/settings";
 import { useUploadStore } from "../store/uploads";
 import UploadPanel from "./UploadPanel";
+import ToastHost from "./ToastHost";
+import UrlSubstitutionPrompt from "./UrlSubstitutionPrompt";
+import { useI18n } from "../i18n";
 
 export default function Layout() {
+  const t = useI18n();
   const logout = useAuthStore((s) => s.logout);
   const username = useAuthStore((s) => s.username);
   const theme = useSettingsStore((s) => s.theme);
   const toggleTheme = useSettingsStore((s) => s.toggleTheme);
   const nav = useNavigate();
+  const location = useLocation();
+  const [navOpen, setNavOpen] = useState(false);
 
   const { isOpen, toggle, running, jobs } = useUploadStore();
 
@@ -21,24 +27,58 @@ export default function Layout() {
   const errorCount = jobs.filter((j) => j.status.state === "error").length;
   const badgeCount = running ? activeCount : pendingCount + errorCount;
 
+  // Close the mobile drawer whenever the route changes
+  useEffect(() => {
+    setNavOpen(false);
+  }, [location.pathname]);
+
   function handleLogout() {
     logout();
     nav("/login", { replace: true });
   }
 
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+    <div className="app-shell">
+      {/* Mobile top bar */}
+      <div className="app-topbar">
+        <button
+          onClick={() => setNavOpen((v) => !v)}
+          aria-label={t.nav_menu}
+          style={{
+            background: "none",
+            border: "1px solid var(--border-soft)",
+            borderRadius: 8,
+            padding: "6px 9px",
+            cursor: "pointer",
+            color: "var(--text-1)",
+            display: "flex",
+          }}
+        >
+          <HamburgerIcon />
+        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <RainLogo />
+          <span
+            style={{
+              fontWeight: 700,
+              fontSize: "0.9rem",
+              color: "var(--text-1)",
+              letterSpacing: "-0.02em",
+            }}
+          >
+            rain<span style={{ color: "var(--accent)" }}>·dms</span>
+          </span>
+        </div>
+      </div>
+
+      {/* Backdrop for mobile drawer */}
+      <div
+        className={`app-backdrop${navOpen ? " open" : ""}`}
+        onClick={() => setNavOpen(false)}
+      />
+
       {/* Sidebar */}
-      <aside
-        style={{
-          width: 210,
-          flexShrink: 0,
-          background: "var(--bg-surface)",
-          borderRight: "1px solid var(--border)",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
+      <aside className={`app-sidebar${navOpen ? " open" : ""}`}>
         {/* Logo */}
         <div
           style={{
@@ -86,7 +126,7 @@ export default function Layout() {
             }}
             onClick={toggle}
           >
-            <PlusIcon /> Upload
+            <PlusIcon /> {t.nav_upload}
             {badgeCount > 0 && (
               <span
                 style={{
@@ -130,9 +170,9 @@ export default function Layout() {
             gap: 1,
           }}
         >
-          <SideLink to="/" label="Documents" icon={<DocsIcon />} end />
-          <SideLink to="/search" label="Search" icon={<SearchIcon />} />
-          <SideLink to="/stats" label="Stats" icon={<StatsIcon />} />
+          <SideLink to="/" label={t.nav_documents} icon={<DocsIcon />} end />
+          <SideLink to="/search" label={t.nav_search} icon={<SearchIcon />} />
+          <SideLink to="/stats" label={t.nav_stats} icon={<StatsIcon />} />
         </nav>
 
         {/* Bottom */}
@@ -145,7 +185,7 @@ export default function Layout() {
             gap: 1,
           }}
         >
-          <SideLink to="/settings" label="Settings" icon={<GearIcon />} />
+          <SideLink to="/settings" label={t.nav_settings} icon={<GearIcon />} />
           <button
             className="btn btn-ghost"
             style={{
@@ -157,7 +197,7 @@ export default function Layout() {
             onClick={toggleTheme}
           >
             {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-            <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+            <span>{theme === "dark" ? t.nav_lightMode : t.nav_darkMode}</span>
           </button>
           <button
             className="btn btn-ghost"
@@ -171,25 +211,24 @@ export default function Layout() {
             onClick={handleLogout}
           >
             <LogoutIcon />
-            <span>Sign out</span>
+            <span>{t.nav_signOut}</span>
           </button>
         </div>
       </aside>
 
       {/* Main — no key/refresh, pages auto-refresh via upload store lastCompletedAt */}
-      <main
-        style={{
-          flex: 1,
-          minWidth: 0,
-          overflow: "auto",
-          background: "var(--bg-base)",
-        }}
-      >
+      <main className="app-main">
         <Outlet />
       </main>
 
       {/* Persistent upload panel */}
       <UploadPanel />
+
+      {/* Global toast notifications */}
+      <ToastHost />
+
+      {/* One-time CORS/base-URL fix prompt */}
+      <UrlSubstitutionPrompt />
     </div>
   );
 }
@@ -226,6 +265,24 @@ function SideLink({
       {icon}
       {label}
     </NavLink>
+  );
+}
+
+function HamburgerIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+    >
+      <line x1="4" y1="7" x2="20" y2="7" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+      <line x1="4" y1="17" x2="20" y2="17" />
+    </svg>
   );
 }
 

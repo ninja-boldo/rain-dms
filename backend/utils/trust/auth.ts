@@ -3,7 +3,11 @@ import { documentsTable, usersTable } from "../../db/schema";
 import crypto from "node:crypto";
 import { eq } from "drizzle-orm";
 import jwt, { sign } from "jsonwebtoken";
-import { getApiBaseUrl, getClusterSecret } from "./envHelpers";
+import {
+  getApiBaseUrl,
+  getClusterSecret,
+  getIsDebugAuthEnabled,
+} from "./envHelpers";
 import { ApiPaths } from "../types/main";
 
 export async function isValidAuthUser(
@@ -12,6 +16,8 @@ export async function isValidAuthUser(
   username: string | null,
 ): Promise<boolean> {
   if (username === null) {
+    if (getIsDebugAuthEnabled())
+      console.log("[AUTH-DEBUG] User validation failed: Username is null.");
     return false;
   }
   try {
@@ -33,14 +39,30 @@ export async function isValidAuthUser(
     try {
       jwt.verify(tokenToVerify, passwordHash); // errors if not valid match
       if (passwordHash === randToken) {
-        // to prevent timing attacks etc.
+        if (getIsDebugAuthEnabled()) {
+          console.log(
+            `[AUTH-DEBUG] User validation failed: User '${username}' not found in DB. Timing attack mitigation triggered.`,
+          );
+        }
         return false;
       }
+      if (getIsDebugAuthEnabled())
+        console.log(`[AUTH-DEBUG] User validation succeeded for: ${username}`);
       return true;
-    } catch {}
+    } catch (jwtError: any) {
+      if (getIsDebugAuthEnabled()) {
+        console.error(
+          `[AUTH-DEBUG] User JWT Verification failed for '${username}':`,
+          jwtError.message,
+        );
+      }
+    }
     return false;
   } catch (error) {
-    console.error("Authentication failed:", error);
+    console.error(
+      "Authentication failed due to database or structural execution failure:",
+      error,
+    );
     return false;
   }
 }
@@ -49,10 +71,44 @@ export async function isValidAuthWorker(
   tokenToVerify: string,
 ): Promise<boolean> {
   const CLUSTER_SECRET = getClusterSecret();
+
+  if (getIsDebugAuthEnabled()) {
+    console.log("[AUTH-DEBUG] Starting Worker Validation...");
+    console.log("[AUTH-DEBUG] Token Payload provided:", tokenToVerify);
+    console.log(
+      "[AUTH-DEBUG] Active Cluster Secret length:",
+      CLUSTER_SECRET ? CLUSTER_SECRET.length : 0,
+    );
+  }
+
   try {
     jwt.verify(tokenToVerify, CLUSTER_SECRET); // errors if not a valid match
+    if (getIsDebugAuthEnabled())
+      console.log(
+        "[AUTH-DEBUG] Worker Token validation verified successfully.",
+      );
     return true;
-  } catch {}
+  } catch (jwtError: any) {
+    if (getIsDebugAuthEnabled()) {
+      console.error(
+        "[AUTH-DEBUG] Worker JWT Verification failed outright! Reason:",
+        jwtError.message,
+      );
+
+      // Additional sanity troubleshooting check for token payloads
+      try {
+        const decoded = jwt.decode(tokenToVerify);
+        console.error(
+          "[AUTH-DEBUG] Malformed Token Payload Breakdown:",
+          decoded,
+        );
+      } catch {
+        console.error(
+          "[AUTH-DEBUG] Failed to even decode string framework safely.",
+        );
+      }
+    }
+  }
   return false;
 }
 
@@ -126,31 +182,41 @@ export async function checkUserIsExisting(username: string): Promise<boolean> {
     throw Error(`failed for this url: ${url} and with this error: ${error}`);
   }
 }
-
 let _cachedToken: string | null = null;
 let _tokenExpiresAt = 0;
-const TOKEN_TTL_S = 60;
+let _oldSecret: string | null = null;
+
+const TOKEN_TTL_S = 1800;
 
 export function getAuthHeader(): Headers {
-  const secret =
-    process.env.CLUSTER_WORKER_SECRET ?? "celestialisabadplaceholder";
+  const secret = getClusterSecret();
   const now = Math.floor(Date.now() / 1000);
 
-  // Regenerate token dynamically if it is close to expiring
-  if (!_cachedToken || now >= _tokenExpiresAt - 60) {
+  const secondsRemaining = _cachedToken ? _tokenExpiresAt - now : 0;
+
+  if (!_cachedToken || now >= _tokenExpiresAt - 600) {
+    const oldToken = _cachedToken;
+
     _tokenExpiresAt = now + TOKEN_TTL_S;
-    _cachedToken = sign(
+    const newToken: string = sign(
       {
+        iat: now,
         exp: _tokenExpiresAt,
         role: "worker",
         iss: "rain-dms-watcher",
       },
       secret,
     );
+
+    console.log(`[AUTH-REFRESH] Regenerated token. 
+      Time remaining on old token was: ${secondsRemaining}s. 
+      Secret matched old secret: ${_oldSecret === secret}`);
+
+    _oldSecret = secret;
+    _cachedToken = newToken;
   }
 
   const h = new Headers();
-  // Pass the secure token via a custom channel so it doesn't conflict with S3 signatures
-  h.append("X-Auth-Token", _cachedToken);
+  h.append("Authorization", `Bearer ${_cachedToken}`);
   return h;
 }

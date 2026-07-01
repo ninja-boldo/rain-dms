@@ -1,11 +1,14 @@
+import { S3Client } from "@aws-sdk/client-s3";
+
 export enum OcrModel {
-  Paddle = "paddle",
+  Paddle = "paddleocr",
   Tesseract = "tesseract",
+  EasyOcr = "easyocr",
 }
 
-export enum PaddleRecognitionModel {
-  PP_OCRv5_mobile_en = "PP-OCRv5-mobile-en",
-  PP_OCRv5_mobile_de = "PP-OCRv5-mobile-de",
+export enum PaddleModelTier {
+  mobile = "mobile",
+  server = "server",
 }
 
 export enum FileTypes {
@@ -97,6 +100,11 @@ export interface OcrResult {
   fileHash: string;
 }
 
+export interface FileInfo {
+  originalFilePath: string;
+  fileHash: string;
+}
+
 export const ImportantDirs = {
   consume: "consume_files",
   temp: "temp",
@@ -157,3 +165,34 @@ export const BucketNames = {
   userUploads: "uploads",
   bannerImgs: "banner-imgs",
 };
+
+export abstract class BaseOcrProcessor {
+  constructor(protected readonly tempFolder: string) {}
+
+  abstract getOcr(
+    filePath: string,
+    encryptionKey: string | null,
+  ): Promise<OcrResult>;
+
+  protected abstract processImage(
+    filePath: string,
+    fileHash: string,
+    encrypt: boolean,
+    key: string | null,
+    rmImg: boolean,
+  ): Promise<OcrResult>;
+
+  protected abstract processPdf(
+    filePath: string,
+    fileHash: string,
+    encrypt: boolean,
+    rmPdf: boolean,
+  ): Promise<OcrResult>;
+}
+
+export enum OsType {
+  Linux,
+  Windows,
+  MacOS,
+  Unknown,
+}

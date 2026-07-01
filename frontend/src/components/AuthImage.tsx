@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAuthStore } from "../store/auth";
 import { apiUrlToS3Base, useSettingsStore } from "../store/settings";
 import { decryptBlob, decryptFileKey } from "../utils/crypto";
+import { applyUrlSubstitutions } from "../utils/urlSubstitution";
 import { handleUnauth } from "../api/client";
 
 interface AuthImageProps {
@@ -12,6 +13,8 @@ interface AuthImageProps {
   style?: React.CSSProperties;
   /** Called once the displayed image has its natural size. */
   onLoad?: (naturalWidth: number, naturalHeight: number) => void;
+  /** Skip the viewport check and fetch immediately — for images already known to be visible (e.g. the open document viewer). */
+  eager?: boolean;
 }
 
 /** Detect MIME type from decrypted bytes (magic bytes) or filename fallback. */
@@ -55,8 +58,10 @@ function detectMime(bytes: Uint8Array, hintUrl: string): string {
  */
 function resolveUrl(src: string, s3Base: string): string {
   if (!src) return src;
-  if (/^https?:\/\//i.test(src)) return src;
-  return `${s3Base.replace(/\/$/, "")}/${src.replace(/^\//, "")}`;
+  if (/^https?:\/\//i.test(src)) return applyUrlSubstitutions(src);
+  return applyUrlSubstitutions(
+    `${s3Base.replace(/\/$/, "")}/${src.replace(/^\//, "")}`,
+  );
 }
 
 export default function AuthImage({
@@ -66,6 +71,7 @@ export default function AuthImage({
   className,
   style,
   onLoad,
+  eager = false,
 }: AuthImageProps) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [error, setError] = useState(false);
@@ -75,9 +81,41 @@ export default function AuthImage({
   const username = useAuthStore((s) => s.username);
   const apiBase = useSettingsStore((s) => s.apiUrl);
   const s3Base = apiUrlToS3Base(apiBase);
+  // Re-run the fetch whenever substitutions change so accepting the
+  // one-time CORS-fix prompt immediately repairs already-broken images.
+  const urlSubstitutions = useSettingsStore((s) => s.urlSubstitutions);
+
+  // Lazy-mount: don't even attempt the authenticated fetch+decrypt until the
+  // placeholder actually scrolls near the viewport. Search/grid/tree views
+  // can have hundreds of thumbnails on screen at once — firing every fetch
+  // immediately was both slow and, under load, made images look permanently
+  // "stuck" mid-load. rootMargin gives a head start so images are usually
+  // ready by the time they're actually visible.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(eager);
 
   useEffect(() => {
-    if (!src) return;
+    if (eager || inView) return;
+    const el = containerRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setInView(true);
+      return;
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setInView(true);
+          obs.disconnect();
+        }
+      },
+      { rootMargin: "400px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [eager, inView]);
+
+  useEffect(() => {
+    if (!src || !inView) return;
     let cancelled = false;
 
     async function load() {
@@ -129,7 +167,7 @@ export default function AuthImage({
     return () => {
       cancelled = true;
     };
-  }, [src, encryptedFileKey, mainKey, s3Base, token, username]);
+  }, [src, inView, encryptedFileKey, mainKey, s3Base, token, username, urlSubstitutions]);
 
   useEffect(
     () => () => {
@@ -141,9 +179,11 @@ export default function AuthImage({
   if (error)
     return (
       <div
+        ref={containerRef}
         className={className}
         style={{
           ...style,
+          minHeight: (style as any)?.minHeight ?? "100%",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -159,22 +199,27 @@ export default function AuthImage({
   if (!objectUrl)
     return (
       <div
+        ref={containerRef}
         className={className}
         style={{
           ...style,
+          minHeight: (style as any)?.minHeight ?? (style as any)?.height ?? "100%",
+          minWidth: (style as any)?.minWidth ?? (style as any)?.width,
           background: "var(--bg-raised)",
-          animation: "pulse 1.5s ease-in-out infinite",
+          animation: inView ? "pulse 1.5s ease-in-out infinite" : undefined,
         }}
       />
     );
 
   return (
     <img
+      ref={containerRef as any}
       src={objectUrl}
       alt={alt}
       className={className}
       style={style}
       draggable={false}
+      loading="lazy"
       onLoad={(e) => {
         const img = e.currentTarget;
         onLoad?.(img.naturalWidth, img.naturalHeight);

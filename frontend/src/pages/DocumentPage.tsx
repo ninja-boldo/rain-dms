@@ -18,6 +18,8 @@ import AuthImage from "../components/AuthImage";
 import { useLocalStore, type LocalMarker } from "../store/localData";
 import { useAuthStore } from "../store/auth";
 import { useSettingsStore } from "../store/settings";
+import { useI18n } from "../i18n";
+import { reportSuccess } from "../store/toast";
 
 interface FlatBox {
   text: string;
@@ -90,6 +92,7 @@ const GAP = 16;
 const OVERSCAN = 2;
 
 export default function DocumentPage() {
+  const t = useI18n();
   const [searchParams] = useSearchParams();
   const filepath = searchParams.get("filepath") ?? "";
   const targetPageIdx = parseInt(searchParams.get("page") ?? "", 10) || 0;
@@ -197,6 +200,7 @@ export default function DocumentPage() {
     setDeleting(true);
     try {
       await deleteDocument(filepath);
+      reportSuccess(t.toast_success, displayName);
       nav("/", { replace: true });
     } catch (e: any) {
       setError(e.message);
@@ -350,21 +354,21 @@ export default function DocumentPage() {
   if (loading)
     return (
       <Centered>
-        <p style={{ color: "var(--text-3)", fontSize: "0.85rem" }}>Loading…</p>
+        <p style={{ color: "var(--text-3)", fontSize: "0.85rem" }}>{t.doc_loading}</p>
       </Centered>
     );
   if (error || !doc)
     return (
       <div style={{ padding: 24 }}>
         <p style={{ color: "var(--danger)", fontSize: "0.85rem" }}>
-          {error ?? "Document not found."}
+          {error ?? t.doc_notFound}
         </p>
         <button
           className="btn btn-ghost"
           onClick={() => nav(-1)}
           style={{ marginTop: 8 }}
         >
-          ← Back
+          {t.doc_back}
         </button>
       </div>
     );
@@ -396,7 +400,7 @@ export default function DocumentPage() {
           onClick={() => nav(-1)}
           style={{ padding: "3px 8px", fontSize: "0.78rem" }}
         >
-          ← Back
+          {t.doc_back}
         </button>
         <div style={{ flex: 1, overflow: "hidden", minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -415,8 +419,8 @@ export default function DocumentPage() {
               {displayName}
             </p>
             <button
-              title={showFullPath ? "Hide path" : "Show full S3 path"}
-              aria-label="Show full path"
+              title={showFullPath ? t.doc_hidePath : t.doc_showPath}
+              aria-label={showFullPath ? t.doc_hidePath : t.doc_showPath}
               onClick={() => setShowFullPath((v) => !v)}
               style={{
                 background: "rgba(0,0,0,0.5)",
@@ -434,20 +438,55 @@ export default function DocumentPage() {
             </button>
           </div>
           {showFullPath && (
-            <p
-              className="mono"
+            <div
               style={{
                 margin: "2px 0 0",
                 fontSize: "0.62rem",
                 color: "var(--text-2)",
-                wordBreak: "break-all",
                 background: "var(--bg-raised)",
-                padding: "4px 6px",
+                padding: "5px 7px",
                 borderRadius: 4,
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
               }}
             >
-              {doc.fileS3Key}
-            </p>
+              <button
+                onClick={() => {
+                  navigator.clipboard?.writeText(doc.fileS3Key).catch(() => {});
+                  reportSuccess(t.toast_success, doc.fileS3Key);
+                }}
+                title={doc.fileS3Key}
+                className="mono"
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  margin: 0,
+                  cursor: "pointer",
+                  color: "var(--text-2)",
+                  fontSize: "0.62rem",
+                  textAlign: "left",
+                  wordBreak: "break-all",
+                }}
+              >
+                {doc.fileS3Key} ⧉
+              </button>
+              <span style={{ fontFamily: "JetBrains Mono, monospace" }}>
+                {t.doc_ingested}: {doc.created_at ? new Date(doc.created_at).toLocaleString() : "—"}
+                {(doc as any).spawned_time && (
+                  <>
+                    {" · "}
+                    {t.doc_pipeline}: {new Date((doc as any).spawned_time).toLocaleString()}
+                  </>
+                )}
+              </span>
+              {doc.file_id != null && (
+                <span style={{ fontFamily: "JetBrains Mono, monospace" }}>
+                  {t.doc_fileId}: {String(doc.file_id)}
+                </span>
+              )}
+            </div>
           )}
           {query && (
             <p
@@ -471,18 +510,15 @@ export default function DocumentPage() {
               >
                 “{query}”
               </span>
-              <span>
-                {allMatches.length} match{allMatches.length !== 1 ? "es" : ""}{" "}
-                in this file
-              </span>
+              <span>{t.doc_matches(allMatches.length)}</span>
             </p>
           )}
           <p style={{ margin: 0, fontSize: "0.64rem", color: "var(--text-3)" }}>
-            page {visibleIdx + 1} / {pages.length}
+            {t.doc_page(visibleIdx + 1, pages.length)}
             {doc.assigned_tags?.length
               ? " · " + doc.assigned_tags.join(", ")
               : ""}
-            {totalOcrBoxes > 0 && ` · ${totalOcrBoxes} OCR boxes`}
+            {totalOcrBoxes > 0 && ` · ${totalOcrBoxes} ${t.doc_ocrBoxes}`}
           </p>
         </div>
         <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
@@ -511,8 +547,8 @@ export default function DocumentPage() {
                   )
                 }
                 style={hitBtnStyle}
-                title="Previous hit"
-                aria-label="Previous hit"
+                title={t.doc_prevHit}
+                aria-label={t.doc_prevHit}
               >
                 ↑
               </button>
@@ -527,8 +563,8 @@ export default function DocumentPage() {
                     });
                   }
                 }}
-                title="Jump to first hit"
-                aria-label="Jump to first hit"
+                title={t.doc_jumpFirst}
+                aria-label={t.doc_jumpFirst}
                 style={{
                   ...hitBtnStyle,
                   padding: "3px 9px",
@@ -556,8 +592,8 @@ export default function DocumentPage() {
                   setActiveGlobalMatch((i) => (i + 1) % allMatches.length)
                 }
                 style={hitBtnStyle}
-                title="Next hit"
-                aria-label="Next hit"
+                title={t.doc_nextHit}
+                aria-label={t.doc_nextHit}
               >
                 ↓
               </button>
@@ -571,7 +607,7 @@ export default function DocumentPage() {
                     "1px solid color-mix(in srgb, var(--accent) 25%, transparent)",
                   opacity: 0.6,
                 }}
-                title="Dismiss glow"
+                title={t.doc_dismiss}
                 aria-label="Dismiss"
               >
                 ✕
@@ -594,12 +630,10 @@ export default function DocumentPage() {
             }
             style={{ fontSize: "0.72rem" }}
             title={
-              markersMode === "draw"
-                ? "Drawing mode: drag a rectangle on a page to create a marker"
-                : "Switch to draw mode to create a new marker"
+              markersMode === "draw" ? t.doc_markModeHint : t.doc_markModeHint2
             }
           >
-            {markersMode === "draw" ? "Drawing…" : "✎ Mark"}
+            {markersMode === "draw" ? t.doc_drawing : t.doc_mark}
           </button>
           {markers.length > 0 && (
             <span
@@ -612,7 +646,7 @@ export default function DocumentPage() {
                 borderRadius: 4,
               }}
             >
-              {markers.length} marker{markers.length !== 1 ? "s" : ""}
+              {t.doc_marker(markers.length)}
             </span>
           )}
           <a
@@ -629,7 +663,7 @@ export default function DocumentPage() {
             disabled={deleting}
             style={{ fontSize: "0.72rem" }}
           >
-            {deleting ? "…" : confirmDel ? "Confirm?" : "Delete"}
+            {deleting ? "…" : confirmDel ? t.doc_confirmDelete : t.doc_delete}
           </button>
           {confirmDel && !deleting && (
             <button
@@ -706,7 +740,7 @@ export default function DocumentPage() {
         <div style={{ height: totalHeight, position: "relative" }}>
           {pageData.length === 0 && (
             <Centered>
-              <p style={{ color: "var(--text-3)" }}>No pages available.</p>
+              <p style={{ color: "var(--text-3)" }}>{t.doc_noPages}</p>
             </Centered>
           )}
           {pageData.map(({ page, boxes }, i) => {
@@ -1272,6 +1306,7 @@ function NoteEditor({
   onClose: () => void;
   onDelete: () => void;
 }) {
+  const t = useI18n();
   const [text, setText] = useState(marker.note ?? "");
   return (
     <div
@@ -1294,7 +1329,7 @@ function NoteEditor({
         autoFocus
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="Note for this marker…"
+        placeholder={t.doc_notePlaceholder}
         rows={3}
         style={{
           width: "100%",
@@ -1321,14 +1356,14 @@ function NoteEditor({
           onClick={onDelete}
           style={{ fontSize: "0.68rem", padding: "3px 7px" }}
         >
-          Delete
+          {t.doc_noteDelete}
         </button>
         <button
           className="btn btn-ghost"
           onClick={onClose}
           style={{ fontSize: "0.68rem", padding: "3px 7px" }}
         >
-          Close
+          {t.doc_noteClose}
         </button>
         <button
           className="btn btn-primary"
@@ -1338,7 +1373,7 @@ function NoteEditor({
           }}
           style={{ fontSize: "0.68rem", padding: "3px 9px" }}
         >
-          Save
+          {t.doc_noteSave}
         </button>
       </div>
     </div>

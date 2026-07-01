@@ -1,5 +1,5 @@
 # deps
-node_modules/
+node_modules
 .env
 testingFiles
 *.traineddata
@@ -47,3 +47,4 @@ postgres_data/
 pg_wal/
 pg_wal
 check.sh
+test_documents

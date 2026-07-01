@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Document } from "../api/client";
 import AuthImage from "./AuthImage";
+import { useI18n } from "../i18n";
 
 interface Props {
   doc: Document;
@@ -37,6 +38,7 @@ function relTime(iso: string): string {
 }
 
 export default function DocumentCard({ doc }: Props) {
+  const t = useI18n();
   const nav = useNavigate();
   const [showPath, setShowPath] = useState(false);
   const e = ext(doc.fileS3Key ?? "");
@@ -109,8 +111,8 @@ export default function DocumentCard({ doc }: Props) {
 
         {/* Stats button */}
         <button
-          title="Open file stats"
-          aria-label="Open file stats"
+          title={t.ft_openStats}
+          aria-label={t.ft_openStats}
           onClick={(ev) => {
             ev.stopPropagation();
             nav(`/file-stats?filepath=${encodeURIComponent(doc.fileS3Key)}`);
@@ -136,8 +138,8 @@ export default function DocumentCard({ doc }: Props) {
 
         {/* ⓘ path reveal */}
         <button
-          title="Show full path"
-          aria-label="Show full path"
+          title={t.ft_showPath}
+          aria-label={t.ft_showPath}
           onClick={(ev) => {
             ev.stopPropagation();
             setShowPath((v) => !v);

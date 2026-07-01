@@ -1,4 +1,7 @@
-import { QueueHandler, PermanentFailureError } from "../utils/helperClasses/QueueConnector";
+import {
+  QueueHandler,
+  PermanentFailureError,
+} from "../utils/helperClasses/QueueConnector";
 import {
   BucketNames,
   OcrModel,
@@ -7,8 +10,6 @@ import {
   QueueObjProcessOcrResult,
   QueueObjStartOcr,
 } from "../utils/types/main";
-import { PaddleJsOcr } from "./ocr/paddle/Paddle";
-import { TesseractOcr } from "./ocr/tesseract/Tesseract";
 import { promises as fs } from "fs";
 import "dotenv/config";
 import path from "path";
@@ -17,8 +18,12 @@ import { decryptFileStream, decryptTxt } from "../utils/trust/cryptography";
 import { S3Client } from "@aws-sdk/client-s3";
 import { getExtension, getFilename } from "../utils/other/pathHelpers";
 import { downloadFileS3, getS3Client } from "../utils/other/s3Helpers";
-import { getEncryptAtRestIsTrue, getMainEncryptionKey } from "../utils/trust/envHelpers";
+import {
+  getEncryptAtRestIsTrue,
+  getMainEncryptionKey,
+} from "../utils/trust/envHelpers";
 import { getEncryptedFileEncKeyApi } from "../utils/other/utils";
+import { PaddleJsOcr } from "./ocr/paddle/paddle-ocr";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -55,7 +60,6 @@ function classifyS3Error(err: any, s3Key: string): never {
 
 export class FileProcessor {
   private paddle!: PaddleJsOcr;
-  private tesseract!: TesseractOcr;
   private queue!: QueueHandler;
   private tempFolder!: string;
   private s3: S3Client | null = null;
@@ -70,11 +74,7 @@ export class FileProcessor {
     this.s3 = await getS3Client();
     this.queue = await QueueHandler.create(process.env.AMQP_URL);
     this.paddle = new PaddleJsOcr(tempFolder);
-    this.tesseract = new TesseractOcr(1, "eng");
-
-    console.log("[Processor] Warming up Paddle OCR worker...");
-    await this.paddle.warmup();
-    console.log("[Processor] Paddle OCR worker ready.");
+    await this.paddle.init();
 
     this.ready = true;
 
@@ -88,6 +88,7 @@ export class FileProcessor {
     queueObj: QueueObjStartOcr,
     model: OcrModel = OcrModel.Paddle,
   ): Promise<void> {
+    console.log(`started work on: ${JSON.stringify(queueObj)}`);
     return this.docLimit(() => this._processDocument(queueObj, model));
   }
 
@@ -180,7 +181,7 @@ export class FileProcessor {
     encryptionKey: string | null,
   ): Promise<OcrResult> {
     try {
-      return await this.paddle.getOcr(this.s3!, localPath, encryptionKey);
+      return await this.paddle.getOcr(localPath, encryptionKey);
     } finally {
       await fs
         .rm(localPath, { force: true })
