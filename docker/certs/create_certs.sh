@@ -46,6 +46,7 @@ CAROOT=$(mkcert -CAROOT)
 ROOT_CA_SOURCE="$CAROOT/rootCA.pem"
 ROOT_CA_DEST="./rootCA.pem"
 
+
 if [ ! -f "$ROOT_CA_SOURCE" ]; then
   echo "ERROR: mkcert root CA not found at:"
   echo "$ROOT_CA_SOURCE"

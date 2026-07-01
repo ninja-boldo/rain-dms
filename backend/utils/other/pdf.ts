@@ -3,10 +3,15 @@ import { changeFilenameForPath, getFilename } from "./pathHelpers";
 import sharp from "sharp";
 import fs from "fs";
 import path from "path";
-import Poppler from "node-poppler";
+import { Poppler } from "node-poppler";
 import os from "node:os";
+import { detectOS } from "./utils";
+import { OsType } from "../types/main";
 
-const poppler = new Poppler("/usr/bin");
+const popplerPath: string =
+  detectOS() === OsType.MacOS ? "/opt/homebrew/bin" : "/usr/bin";
+
+const poppler = new Poppler(popplerPath);
 const PARALLEL_THRESHOLD = 20;
 const RE_PAGE_NUM = /-(\d+)\.(?:jpg|jpeg)$/i;
 

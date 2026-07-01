@@ -1,38 +1,81 @@
-import { LineOcr, PageOcr } from "../types/main";
+import { Box, PaddleOcrResult } from "ppu-paddle-ocr";
+import {
+  BoundingBoxOcr,
+  BoxOcr,
+  FileInfo,
+  LineOcr,
+  OcrResult,
+  PageOcr,
+  S3ReturnObj,
+} from "../types/main";
 
-function boundingBoxFromPoints(
-  points: number[][],
-): LineOcr["boxes"][0]["boundingBox"] {
-  if (points.length === 0)
-    return { upLeftPoint: { x: 0, y: 0 }, downRightPoint: { x: 0, y: 0 } };
+export function createOcrMapping(
+  results: PaddleOcrResult[],
+  s3Keys: S3ReturnObj[],
+): Map<PaddleOcrResult, S3ReturnObj> {
+  if (results.length !== s3Keys.length) {
+    throw Error(
+      `results array (length ${results.length}) isnt the same length as the the s3 keys array (length ${s3Keys.length})`,
+    );
+  }
+  const mapping = new Map<PaddleOcrResult, S3ReturnObj>();
 
-  const xs = points.map((p) => p[0]);
-  const ys = points.map((p) => p[1]);
+  for (let i = 0; i < results.length; i++) {
+    mapping.set(results[i], s3Keys[i]);
+  }
 
+  return mapping;
+}
+
+function convertPaddleBoxToCustom(box: Box): BoundingBoxOcr {
   return {
-    upLeftPoint: { x: Math.min(...xs), y: Math.min(...ys) },
-    downRightPoint: { x: Math.max(...xs), y: Math.max(...ys) },
+    upLeftPoint: { x: box.x, y: box.y },
+    downRightPoint: { x: box.x + box.width, y: box.y + box.height },
   };
 }
 
-export function mapRawResultToPage(
-  rawRes: any,
-  pageNumber: number,
-  bannerImgpath: string,
+export function PaddleOcrResToPageOcr(
+  res: PaddleOcrResult,
+  bannerImgKey: string,
+  pageIdx: number,
 ): PageOcr {
-  const rawElements: any[] = rawRes?.ocrElements ?? rawRes?.elements ?? [];
+  const lines: LineOcr[] = [];
 
-  const lines: LineOcr[] = rawElements.map(
-    (el): LineOcr => ({
-      boxes: [
-        {
-          text: el.text ?? el.content ?? "",
-          confidence: el.confidence?.recognition ?? null,
-          boundingBox: boundingBoxFromPoints(el.geometry?.points ?? []),
-        },
-      ],
-    }),
-  );
+  for (const line of res.lines) {
+    const boxes: BoxOcr[] = [];
+    for (const box of line) {
+      boxes.push({
+        boundingBox: convertPaddleBoxToCustom(box.box),
+        confidence: box.confidence,
+        text: box.text,
+      });
+    }
+    lines.push({ boxes: boxes });
+  }
+  const page: PageOcr = {
+    pageNumber: pageIdx,
+    lines,
+    bannerImgpath: bannerImgKey,
+  };
+  return page;
+}
 
-  return { pageNumber, lines, bannerImgpath };
+export function PaddleOcrResultsToOcrRes(
+  mapping: Map<PaddleOcrResult, S3ReturnObj>,
+  info: FileInfo,
+): OcrResult {
+  const pages: PageOcr[] = [];
+  let pageIndex = 0;
+
+  for (const [rawResult, s3Obj] of mapping) {
+    const page = PaddleOcrResToPageOcr(rawResult, s3Obj.s3Key, pageIndex);
+    pages.push(page);
+    pageIndex++;
+  }
+
+  return {
+    pages,
+    originalFilePath: info.originalFilePath,
+    fileHash: info.fileHash,
+  };
 }

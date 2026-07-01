@@ -54,16 +54,16 @@ const STATUS_COLOR: Record<string, string> = {
   error: "var(--danger)",
 };
 
-const STATUS_LABEL = (j: UploadJob): string => {
+const STATUS_LABEL = (j: UploadJob, t: ReturnType<typeof useI18n>): string => {
   const s = j.status;
   if (s.state === "error") return `✗ ${s.message.slice(0, 50)}`;
-  if (s.state === "skipped") return "— skipped";
+  if (s.state === "skipped") return t.ul_skipped;
   if (s.state === "uploading") return `↑ ${s.progress}%`;
-  return (
-    { pending: "·", hashing: "⟳ hashing…", duplicate: "= dup", done: "✓ done" }[
-      s.state
-    ] ?? s.state
-  );
+  if (s.state === "pending") return "·";
+  if (s.state === "hashing") return `⟳ ${t.ul_hashing}`;
+  if (s.state === "duplicate") return `= ${t.ul_duplicate}`;
+  if (s.state === "done") return `✓ ${t.ul_done}`;
+  return (s as any).state ?? "";
 };
 
 export default function UploadPanel() {
@@ -73,6 +73,8 @@ export default function UploadPanel() {
     isOpen,
     isMinimized,
     running,
+    activeWorkers,
+    requestsPerSecond,
     addFiles,
     start,
     abort,
@@ -134,6 +136,7 @@ export default function UploadPanel() {
   if (isMinimized) {
     return (
       <div
+        className="upload-panel-shell"
         onClick={() => minimize(false)}
         style={{
           position: "fixed",
@@ -150,6 +153,8 @@ export default function UploadPanel() {
           gap: 8,
           boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
           userSelect: "none",
+          flexWrap: "wrap",
+          maxWidth: "calc(100vw - 40px)",
         }}
       >
         <UploadIco />
@@ -160,9 +165,28 @@ export default function UploadPanel() {
             color: "var(--text-1)",
           }}
         >
-          Uploads
+          {t.ul_uploadsTitle}
         </span>
-        {active > 0 && (
+        {running && activeWorkers > 0 && (
+          <span
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              background: "var(--accent-glow)",
+              color: "var(--accent)",
+              borderRadius: 999,
+              padding: "1px 7px",
+              fontSize: "0.62rem",
+              fontWeight: 700,
+              fontFamily: "JetBrains Mono, monospace",
+            }}
+          >
+            <ActivityDot />
+            {t.ul_parallel(activeWorkers)}
+          </span>
+        )}
+        {active > 0 && !running && (
           <span
             style={{
               background: "var(--accent)",
@@ -208,6 +232,7 @@ export default function UploadPanel() {
 
   return (
     <div
+      className="upload-panel-shell"
       style={{
         position: "fixed",
         bottom: 20,
@@ -225,7 +250,7 @@ export default function UploadPanel() {
         overflow: "hidden",
       }}
     >
-      {/* Header */}
+      {/* Header — wraps instead of clipping so minimize/close are always reachable */}
       <div
         style={{
           padding: "10px 12px",
@@ -233,12 +258,14 @@ export default function UploadPanel() {
           display: "flex",
           alignItems: "center",
           gap: 8,
+          rowGap: 6,
+          flexWrap: "wrap",
           flexShrink: 0,
         }}
       >
         <UploadIco />
-        <span style={{ fontWeight: 600, fontSize: "0.85rem", flex: 1 }}>
-          Uploads
+        <span style={{ fontWeight: 600, fontSize: "0.85rem", flex: "1 1 auto", minWidth: 60, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {t.ul_uploadsTitle}
           {total > 0 && (
             <span
               style={{
@@ -257,6 +284,28 @@ export default function UploadPanel() {
             </span>
           )}
         </span>
+        {running && activeWorkers > 0 && (
+          <span
+            title={t.ul_reqPerSec(requestsPerSecond)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              background: "var(--accent-glow)",
+              color: "var(--accent)",
+              borderRadius: 999,
+              padding: "2px 8px",
+              fontSize: "0.63rem",
+              fontWeight: 700,
+              fontFamily: "JetBrains Mono, monospace",
+              flexShrink: 0,
+            }}
+          >
+            <ActivityDot />
+            {t.ul_parallel(activeWorkers)}
+            <span style={{ opacity: 0.7 }}>· {t.ul_reqPerSec(requestsPerSecond)}</span>
+          </span>
+        )}
         {running ? (
           <button
             onClick={abort}
@@ -265,9 +314,9 @@ export default function UploadPanel() {
               color: "var(--danger)",
               borderColor: "rgba(248,113,113,0.3)",
             }}
-            title="Abort"
+            title={t.ul_stop}
           >
-            ■ Stop
+            {t.ul_stop}
           </button>
         ) : pending > 0 ? (
           <button
@@ -286,22 +335,22 @@ export default function UploadPanel() {
           <button
             onClick={clearFinished}
             style={btnSm}
-            title="Clear done/error"
+            title={t.ul_clear}
           >
-            ✕ clear
+            {t.ul_clear}
           </button>
         )}
         <button
           onClick={() => minimize(true)}
           style={{ ...btnSm, fontSize: "0.7rem" }}
-          title="Minimize"
+          title={t.ul_minimize}
         >
           ▼
         </button>
         <button
           onClick={toggle}
           style={{ ...btnSm, fontSize: "0.7rem" }}
-          title="Close"
+          title={t.ul_close}
         >
           ✕
         </button>
@@ -453,7 +502,7 @@ export default function UploadPanel() {
                   fontFamily: "JetBrains Mono, monospace",
                 }}
               >
-                {STATUS_LABEL(job)}
+                {STATUS_LABEL(job, t)}
               </span>
               {(job.status.state === "error" ||
                 job.status.state === "skipped") && (
@@ -491,6 +540,22 @@ const btnSm: React.CSSProperties = {
   whiteSpace: "nowrap",
   flexShrink: 0,
 };
+
+function ActivityDot() {
+  return (
+    <span
+      style={{
+        width: 6,
+        height: 6,
+        borderRadius: "50%",
+        background: "var(--accent)",
+        boxShadow: "0 0 5px var(--accent)",
+        animation: "pulse 0.9s ease-in-out infinite",
+        flexShrink: 0,
+      }}
+    />
+  );
+}
 
 function UploadIco() {
   return (

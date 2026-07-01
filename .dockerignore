@@ -1,4 +1,5 @@
 node_modules
+backend/node_modules
 .git
 temp/
 backend_js/temp_consume/
@@ -8,11 +9,56 @@ docker/meili_data/
 *.log
 *.traineddata
 *.pdf
+
+# Raster images (common)
 *.png
 *.jpg
 *.jpeg
 *.webp
+*.gif
+*.bmp
+*.tiff
+*.tif
+*.heic
+*.heif
+*.avif
+
+# Camera RAW formats
+*.raw
+*.cr2
+*.cr3
+*.nef
+*.arw
+*.dng
+*.orf
+*.rw2
+
+# Vector formats
+*.svg
+*.eps
+*.ai
+*.pdf
+*.cdr
+
+# Editing / project files
+*.psd
+*.xcf
+*.kra
+
+# Legacy / niche formats
+*.tga
+*.pcx
+*.ppm
+*.pgm
+*.pbm
+*.hdr
+*.exr
+
+# Archives sometimes used for image sets
 *.zip
+*.rar
+*.7z
+
 /backend_js/banner_imgs
 *.pem
 *.DS_Store
@@ -23,6 +69,8 @@ docker
 *.log
 *.ms
 *.dump
+**/node_modules
+**/dist
 
 
 *.ms
@@ -38,3 +86,4 @@ postgres_data/
 pg_wal/
 pg_wal
 check.sh
+test_documents

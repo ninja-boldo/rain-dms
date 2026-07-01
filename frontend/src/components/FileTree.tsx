@@ -1,6 +1,9 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import type { CSSProperties } from "react";
 import type { Document } from "../api/client";
+import { deleteDocument } from "../api/client";
+import { reportSuccess } from "../store/toast";
 import { useI18n } from "../i18n";
 
 export type FileTreeSortKey =
@@ -130,6 +133,18 @@ function compareBySort(a: Document, b: Document, key: FileTreeSortKey): number {
   }
 }
 
+const smallBtn: CSSProperties = {
+  background: "none",
+  border: "1px solid var(--border-soft)",
+  borderRadius: 4,
+  cursor: "pointer",
+  color: "var(--text-3)",
+  fontSize: "0.66rem",
+  padding: "2px 7px",
+  whiteSpace: "nowrap",
+  fontFamily: "JetBrains Mono, monospace",
+};
+
 function loadTodo(): Set<string> {
   try {
     return new Set(JSON.parse(localStorage.getItem("rain-dms-todo") ?? "[]"));
@@ -155,6 +170,9 @@ interface NodeRowProps {
   onSelect: (doc: Document | null) => void;
   openSet: Set<string>;
   onToggleOpen: (path: string) => void;
+  pickMode: boolean;
+  picked: Set<string>;
+  onTogglePick: (key: string) => void;
 }
 
 function nodeMatchesFilter(node: TreeNode, filter: string): boolean {
@@ -188,6 +206,9 @@ function NodeRow({
   onSelect,
   openSet,
   onToggleOpen,
+  pickMode,
+  picked,
+  onTogglePick,
 }: NodeRowProps) {
   const nav = useNavigate();
   const t = useI18n();
@@ -199,6 +220,7 @@ function NodeRow({
   const isTodo = todo.has(node.fullPath);
   const isSimulated = !!node.isSimulated && !isLeaf;
   const isSelected = selectedPath === node.doc?.fileS3Key;
+  const isPicked = isLeaf && !!node.doc && picked.has(node.doc.fileS3Key);
 
   if (filter && !nodeMatchesFilter(node, filter)) return null;
   if (pathFilter && !nodeMatchesPathFilter(node, pathFilter)) return null;
@@ -229,11 +251,13 @@ function NodeRow({
     );
   }
 
-  const rowBg = isSelected
+  const rowBg = isPicked
     ? "var(--accent-glow)"
-    : hovered
-      ? "var(--bg-hover)"
-      : "transparent";
+    : isSelected
+      ? "var(--accent-glow)"
+      : hovered
+        ? "var(--bg-hover)"
+        : "transparent";
 
   return (
     <div style={{ position: "relative" }}>
@@ -244,8 +268,12 @@ function NodeRow({
         onMouseLeave={() => setHovered(false)}
         onClick={() => {
           if (isLeaf && node.doc) {
-            onSelect(node.doc);
-            nav(`/document?filepath=${encodeURIComponent(node.doc.fileS3Key)}`);
+            if (pickMode) {
+              onTogglePick(node.doc.fileS3Key);
+            } else {
+              onSelect(node.doc);
+              nav(`/document?filepath=${encodeURIComponent(node.doc.fileS3Key)}`);
+            }
           } else {
             onToggleOpen(node.fullPath);
             onSelect(null);
@@ -276,6 +304,28 @@ function NodeRow({
           <Chevron open={open} />
         ) : (
           <span style={{ width: 9, flexShrink: 0 }} />
+        )}
+
+        {/* Pick checkbox (leaves only, select mode) */}
+        {pickMode && isLeaf && (
+          <span
+            style={{
+              width: 13,
+              height: 13,
+              borderRadius: 3,
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: isPicked ? "var(--accent)" : "transparent",
+              border: `1.5px solid ${isPicked ? "var(--accent)" : "var(--border)"}`,
+              color: "var(--accent-fg)",
+              fontSize: "0.55rem",
+              fontWeight: 700,
+            }}
+          >
+            {isPicked ? "✓" : ""}
+          </span>
         )}
 
         {/* Icon */}
@@ -472,6 +522,9 @@ function NodeRow({
               onSelect={onSelect}
               openSet={openSet}
               onToggleOpen={onToggleOpen}
+              pickMode={pickMode}
+              picked={picked}
+              onTogglePick={onTogglePick}
             />
           ))}
         </>
@@ -585,6 +638,8 @@ interface FileTreeProps {
   sortKey: FileTreeSortKey;
   selectedPath?: string | null;
   onSelect?: (doc: Document | null) => void;
+  /** Called after a bulk delete completes so the parent can refresh its document list. */
+  onChanged?: () => void;
 }
 
 export default function FileTree({
@@ -594,11 +649,59 @@ export default function FileTree({
   sortKey,
   selectedPath = null,
   onSelect,
+  onChanged,
 }: FileTreeProps) {
   const t = useI18n();
   const [todo, setTodo] = useState<Set<string>>(() => loadTodo());
   const [pathFilter, setPathFilter] = useState("");
   const pathFilterRef = useRef<HTMLInputElement>(null);
+
+  // Multi-select + bulk delete
+  const [pickMode, setPickMode] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  function togglePick(key: string) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+  function selectAllVisible() {
+    setPicked(new Set(documents.map((d) => d.fileS3Key)));
+  }
+  function clearPicked() {
+    setPicked(new Set());
+    setDeleteConfirm(false);
+  }
+  function togglePickMode() {
+    setPickMode((v) => !v);
+    clearPicked();
+  }
+  async function bulkDeletePicked() {
+    if (!deleteConfirm) {
+      setDeleteConfirm(true);
+      return;
+    }
+    setDeleting(true);
+    const keys = [...picked];
+    let ok = 0;
+    for (const key of keys) {
+      try {
+        await deleteDocument(key);
+        ok++;
+      } catch {
+        /* apiFetch already surfaces a toast with the real error */
+      }
+    }
+    setDeleting(false);
+    clearPicked();
+    setPickMode(false);
+    if (ok > 0) reportSuccess(t.toast_success, `${ok}/${keys.length}`);
+    onChanged?.();
+  }
 
   // Track which folders are open (by fullPath)
   const [openSet, setOpenSet] = useState<Set<string>>(() => new Set());
@@ -828,7 +931,78 @@ export default function FileTree({
           >
             <ExpandIco />
           </button>
+          <button
+            onClick={togglePickMode}
+            title={t.ft_select}
+            style={{
+              background: pickMode ? "var(--accent-glow)" : "none",
+              border: `1px solid ${pickMode ? "var(--accent)" : "var(--border-soft)"}`,
+              borderRadius: 4,
+              cursor: "pointer",
+              color: pickMode ? "var(--accent)" : "var(--text-3)",
+              fontSize: "0.62rem",
+              padding: "3px 7px",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+              fontWeight: pickMode ? 600 : 400,
+            }}
+          >
+            ☑ {t.ft_select}
+          </button>
         </div>
+
+        {/* Bulk select action bar */}
+        {pickMode && (
+          <div
+            style={{
+              display: "flex",
+              gap: 6,
+              alignItems: "center",
+              padding: "2px 2px 0",
+              flexWrap: "wrap",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "0.68rem",
+                color: "var(--text-2)",
+                fontFamily: "JetBrains Mono, monospace",
+              }}
+            >
+              {t.ft_selected(picked.size)}
+            </span>
+            <button onClick={selectAllVisible} style={smallBtn}>
+              {documents.length}
+            </button>
+            <button onClick={clearPicked} style={smallBtn} disabled={picked.size === 0}>
+              ✕
+            </button>
+            {picked.size > 0 && (
+              <button
+                onClick={bulkDeletePicked}
+                disabled={deleting}
+                style={{
+                  ...smallBtn,
+                  color: "var(--danger)",
+                  borderColor: "rgba(248,113,113,0.35)",
+                  background: deleteConfirm ? "rgba(248,113,113,0.15)" : undefined,
+                  marginLeft: "auto",
+                }}
+              >
+                {deleting
+                  ? t.main_deleting
+                  : deleteConfirm
+                    ? t.ft_confirmDelete(picked.size)
+                    : t.ft_delete(picked.size)}
+              </button>
+            )}
+            {deleteConfirm && (
+              <button onClick={() => setDeleteConfirm(false)} style={smallBtn}>
+                {t.main_cancel}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Selected doc breadcrumb */}
         {selectedDoc && <SelectedBreadcrumb doc={selectedDoc} />}
@@ -875,6 +1049,9 @@ export default function FileTree({
             onSelect={handleSelect}
             openSet={openSet}
             onToggleOpen={toggleOpen}
+            pickMode={pickMode}
+            picked={picked}
+            onTogglePick={togglePick}
           />
         ))}
       </div>

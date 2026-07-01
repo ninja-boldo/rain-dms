@@ -8,6 +8,16 @@ spec:
     - parameter: host
       name: app-env
       key: AMQP_URL
+    - parameter: caCert
+      name: certificate
+      key: ca.crt
+    - parameter: tlsClientCert
+      name: certificate
+      key: tls.crt
+    - parameter: tlsClientKey
+      name: certificate
+      key: tls.key
+
 ---
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
@@ -90,7 +100,7 @@ spec:
             - name: OMP_PLACES
               value: "cores"
             - name: NODE_EXTRA_CA_CERTS
-              value: /certs/ca.crt
+              value: /ca/ca.crt
 
           envFrom:
             - secretRef:
@@ -100,18 +110,27 @@ spec:
 
           resources:
             requests:
-              cpu: "2"
-              memory: 2Gi
+              cpu: "3"
+              memory: 4Gi
             limits:
               cpu: "4"
-              memory: 4Gi
+              memory: 6Gi
 
           volumeMounts:
             - name: cert-vol
               mountPath: /certs
+              readOnly: true
+            - name: ca-vol
+              mountPath: /ca
               readOnly: true
 
       volumes:
         - name: cert-vol
           secret:
             secretName: external-server-cert
+        - name: ca-vol
+          secret:
+            secretName: custom-root-ca
+            items:
+              - key: ca
+                path: ca.crt

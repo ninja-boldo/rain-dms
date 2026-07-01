@@ -5,14 +5,18 @@ SECRET_NAME="custom-root-ca"
 ENV_SECRET_NAME="rain-dms-env"
 APP_SECRET_NAME="app-env"
 NAMESPACE="default"
-CERT_NAME="rain.dms.cert"
-CERT_FILE="${CERT_NAME}.pem"
-KEY_FILE="${CERT_NAME}-key.pem"
+CERT_NAME="external-server-cert"
+CERT_FILE="rain.dms.cert.pem"
+KEY_FILE="rain.dms.cert-key.pem"
 ROOT_CA_FILE="./rootCA.pem"
 ENV_FILE="../.env"
 
-set -a
+RABBITMQ_CERT_NAME="rabbitmq-cert"
+RABBITMQ_CERT_FILE="${RABBITMQ_CERT_NAME}.pem"
+RABBITMQ_KEY_FILE="${RABBITMQ_CERT_NAME}-key.pem"
 
+
+set -a
 source "$ENV_FILE"
 set +a
 
@@ -20,12 +24,7 @@ kubectl get nodes
 
 echo "Recreating Kubernetes secrets..."
 
-kubectl create secret generic "$SECRET_NAME" \
-  --from-file=ca.crt="$ROOT_CA_FILE" \
-  -n "$NAMESPACE" \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-kubectl create secret tls "tls-$CERT_NAME" \
+kubectl create secret tls "$CERT_NAME" \
   --cert="$CERT_FILE" \
   --key="$KEY_FILE" \
   -n "$NAMESPACE" \
@@ -56,5 +55,15 @@ kubectl create secret generic "$APP_SECRET_NAME" \
   --from-literal=AMQP_URL="amqps://${RABBITMQ_USER}:${RABBITMQ_PASS}@${SERVER_IP}:5671" \
   -n "$NAMESPACE" \
   --dry-run=client -o yaml | kubectl apply -f -
+
+  # --- Create the CA secret for keda
+kubectl create secret generic keda-custom-ca \
+  --from-file=ca.crt="$ROOT_CA_FILE" \
+  --from-file=tls.crt="$RABBITMQ_CERT_FILE" \
+  --from-file=tls.key="$RABBITMQ_KEY_FILE" \
+  -n default \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+
 
 echo "✓ Kubernetes secrets updated"

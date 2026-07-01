@@ -4,15 +4,19 @@ import { signIn, signUp } from "../api/client";
 import { useAuthStore } from "../store/auth";
 import { useSettingsStore } from "../store/settings";
 import { decryptMainEncryptionKey } from "../utils/crypto";
+import { useI18n } from "../i18n";
 
 type Mode = "signin" | "signup";
 
 export default function LoginPage() {
+  const t = useI18n();
   const nav = useNavigate();
   const [searchParams] = useSearchParams();
   const setAuth = useAuthStore((s) => s.setAuth);
   const apiUrl = useSettingsStore((s) => s.apiUrl);
   const setApiUrl = useSettingsStore((s) => s.setApiUrl);
+  const lang = useSettingsStore((s) => s.lang);
+  const setLang = useSettingsStore((s) => s.setLang);
 
   const nextPath = (() => {
     const raw = searchParams.get("next");
@@ -73,7 +77,7 @@ export default function LoginPage() {
       setAuth(res.token, username.trim(), mainKey);
       nav(nextPath, { replace: true });
     } catch (err: any) {
-      setError(err.message ?? "Something went wrong");
+      setError(err.message ?? t.lg_something);
     } finally {
       setLoading(false);
     }
@@ -91,6 +95,37 @@ export default function LoginPage() {
       }}
     >
       <div style={{ width: "100%", maxWidth: 400 }}>
+        {/* Language toggle */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            gap: 4,
+            marginBottom: 12,
+          }}
+        >
+          {(["en", "de"] as const).map((l) => (
+            <button
+              key={l}
+              onClick={() => setLang(l)}
+              style={{
+                background: lang === l ? "var(--accent-glow)" : "none",
+                border: `1px solid ${lang === l ? "var(--accent)" : "var(--border-soft)"}`,
+                borderRadius: 5,
+                cursor: "pointer",
+                color: lang === l ? "var(--accent)" : "var(--text-3)",
+                fontSize: "0.68rem",
+                fontWeight: 600,
+                padding: "2px 9px",
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+              }}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
+
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <RainLogo />
@@ -106,7 +141,7 @@ export default function LoginPage() {
             rain<span style={{ color: "var(--accent)" }}>-dms</span>
           </h1>
           <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-3)" }}>
-            document management system
+            {t.lg_dmsSub}
           </p>
         </div>
 
@@ -123,7 +158,7 @@ export default function LoginPage() {
               textAlign: "center",
             }}
           >
-            Your session expired. Please sign in again.
+            {t.lg_sessionExpired}
           </p>
         )}
 
@@ -160,7 +195,7 @@ export default function LoginPage() {
                   boxShadow: mode === m ? "0 1px 3px rgba(0,0,0,0.2)" : "none",
                 }}
               >
-                {m === "signin" ? "Sign in" : "Sign up"}
+                {m === "signin" ? t.lg_signin : t.lg_signup}
               </button>
             ))}
           </div>
@@ -170,7 +205,7 @@ export default function LoginPage() {
             style={{ display: "flex", flexDirection: "column", gap: 13 }}
           >
             <div>
-              <label className="label">Username</label>
+              <label className="label">{t.lg_username}</label>
               <input
                 className="input"
                 type="text"
@@ -183,7 +218,7 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label className="label">Password</label>
+              <label className="label">{t.lg_password}</label>
               <input
                 className="input"
                 type="password"
@@ -225,10 +260,10 @@ export default function LoginPage() {
               }}
             >
               {loading
-                ? "Working…"
+                ? t.lg_working
                 : mode === "signin"
-                  ? "Sign in"
-                  : "Create account"}
+                  ? t.lg_signin
+                  : t.lg_create}
             </button>
           </form>
 
@@ -263,18 +298,18 @@ export default function LoginPage() {
               >
                 ›
               </span>{" "}
-              Advanced
+              {t.lg_advanced}
             </button>
 
             {showAdv && (
               <div style={{ marginTop: 10 }}>
-                <label className="label">API base URL</label>
+                <label className="label">{t.lg_apiUrl}</label>
                 <div style={{ display: "flex", gap: 6 }}>
                   <input
                     className="input"
                     value={apiDraft}
                     onChange={(e) => setApiDraft(e.target.value)}
-                    placeholder="https://192.168.1.188:7443/api"
+                    placeholder={t.lg_apiUrlPh}
                     style={{
                       fontFamily: "JetBrains Mono, monospace",
                       fontSize: "0.75rem",
@@ -286,7 +321,7 @@ export default function LoginPage() {
                     onClick={saveApi}
                     style={{ flexShrink: 0, fontSize: "0.78rem" }}
                   >
-                    Save
+                    {t.lg_save}
                   </button>
                 </div>
                 <p
@@ -296,10 +331,7 @@ export default function LoginPage() {
                     color: "var(--text-3)",
                   }}
                 >
-                  Defaults to{" "}
-                  <span className="mono" style={{ color: "var(--text-2)" }}>
-                    {window.location.origin}/api
-                  </span>
+{t.lg_apiUrlHint(window.location.origin)}
                 </p>
               </div>
             )}
@@ -315,7 +347,7 @@ export default function LoginPage() {
             fontFamily: "JetBrains Mono, monospace",
           }}
         >
-          self-hosted · end-to-end encrypted
+          {t.lg_tagline}
         </p>
       </div>
     </div>

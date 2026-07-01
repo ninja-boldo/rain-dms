@@ -19,6 +19,7 @@ export interface LocalReminder {
 }
 
 const STORE_KEY = "rain-dms-local";
+const CHANGE_EVENT = "rain-dms-local-change";
 
 interface Store {
   markers: Record<string, LocalMarker[]>;
@@ -49,9 +50,59 @@ function save(s: Store) {
   if (typeof localStorage === "undefined") return;
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(s));
+    // "storage" events only fire in *other* tabs — dispatch our own so
+    // same-tab consumers (e.g. a global reminders list) update immediately.
+    window.dispatchEvent(new CustomEvent(CHANGE_EVENT));
   } catch {
     // quota exceeded — best effort
   }
+}
+
+export interface GlobalReminder extends LocalReminder {
+  filepath: string;
+}
+
+/** All reminders across every file, for a global "pending reminders" view. */
+export function getAllReminders(): GlobalReminder[] {
+  const s = load();
+  return Object.entries(s.reminders).map(([filepath, r]) => ({
+    filepath,
+    ...r,
+  }));
+}
+
+export function useAllReminders(): GlobalReminder[] {
+  const [reminders, setReminders] = useState<GlobalReminder[]>(() =>
+    getAllReminders(),
+  );
+
+  useEffect(() => {
+    function refresh() {
+      setReminders(getAllReminders());
+    }
+    window.addEventListener("storage", refresh);
+    window.addEventListener(CHANGE_EVENT, refresh);
+    return () => {
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener(CHANGE_EVENT, refresh);
+    };
+  }, []);
+
+  return reminders;
+}
+
+/** Mark a reminder done from anywhere (e.g. a global reminders list), without mounting a per-file hook. */
+export function markReminderDone(filepath: string) {
+  const s = load();
+  const existing = s.reminders[filepath];
+  if (!existing) return;
+  save({
+    ...s,
+    reminders: {
+      ...s.reminders,
+      [filepath]: { ...existing, done_at: new Date().toISOString() },
+    },
+  });
 }
 
 export function useLocalStore(filepath: string | null) {
@@ -61,8 +112,15 @@ export function useLocalStore(filepath: string | null) {
     function onStorage(e: StorageEvent) {
       if (e.key === STORE_KEY) setStore(load());
     }
+    function onLocalChange() {
+      setStore(load());
+    }
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    window.addEventListener(CHANGE_EVENT, onLocalChange);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(CHANGE_EVENT, onLocalChange);
+    };
   }, []);
 
   const write = useCallback((updater: (s: Store) => Store) => {

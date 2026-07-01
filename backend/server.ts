@@ -9,24 +9,24 @@ import { Pool } from "pg";
 import { documentsTable, pagesTable, usersTable } from "./db/schema";
 import { BucketNames, QueueNames, QueueStats } from "./utils/types/main";
 import fs from "fs";
-import {
-  getQueueHandler as rawGetQueueHandler,
-  isValidAuthUser,
-  isValidAuthWorker,
-  isValidAuth,
-  getMainEncryptionKey,
-  getConsumePath,
-} from "./utils/utils";
-import { getMeilisearch, syncIndex } from "./utils/IndexBuilder";
-import {
-  fileHashExistsServer,
-  getFileEncKeyDb,
-  getS3Url,
-  usernameExistsServer,
-} from "./workers/ocr/utils";
-import { encryptTxt, passwordToKeyHex } from "./utils/cryptography";
 import { QueueHandler } from "./utils/helperClasses/QueueConnector";
 import path from "node:path";
+import {
+  fileHashExistsServer,
+  getConsumePath,
+  getFileEncKeyDb,
+  getQueueHandler,
+} from "./utils/other/utils";
+import { getS3Url } from "./utils/other/s3Helpers";
+import {
+  isValidAuth,
+  isValidAuthUser,
+  isValidAuthWorker,
+  usernameExistsServer,
+} from "./utils/trust/auth";
+import { encryptTxt, passwordToKeyHex } from "./utils/trust/cryptography";
+import { getMainEncryptionKey } from "./utils/trust/envHelpers";
+import { getMeilisearch, syncIndex } from "./utils/helperClasses/IndexBuilder";
 
 const pgPool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -45,7 +45,7 @@ const _cache = new Map<string, CacheEntry>();
 let sharedQueueHandler: QueueHandler | null = null;
 async function getSharedQueue() {
   if (!sharedQueueHandler) {
-    sharedQueueHandler = await rawGetQueueHandler();
+    sharedQueueHandler = await getQueueHandler();
   }
   return sharedQueueHandler;
 }
@@ -80,6 +80,11 @@ async function resolveS3BaseUrl(
     console.log(`now using ${cachedS3Url} instead of the old ${originalS3}`);
   }
   return cachedS3Url;
+}
+
+function bannerImgRelativePath(bannerImg: string | null): string | null {
+  if (!bannerImg) return bannerImg;
+  return `${BucketNames.bannerImgs}/${bannerImg}`;
 }
 
 const mainBucket: string = "uploads";
@@ -130,12 +135,15 @@ app.use("*", async (c, next) => {
   );
   if (isPublic) return next();
 
-  const token = c.req.header("X-Auth-Token") ?? c.req.header("Authorization");
+  let token = c.req.header("X-Auth-Token") ?? c.req.header("Authorization");
+
   const username = c.req.header("X-Username") ?? c.req.header("username");
 
   if (!token) {
     return c.json({ detail: "Missing Authorization header" }, 401);
   }
+
+  token = token.replace(/^bearer\s+/i, "");
 
   try {
     const secret = process.env.CLUSTER_WORKER_SECRET ?? "";
@@ -529,7 +537,7 @@ async function computeWorkers() {
   const enrich = (
     consumers: Awaited<ReturnType<typeof qh.getConsumerDetails>>,
   ) => {
-    // Only return the unique connections sorted by active profiles to mask temporary channels
+
     const uniqueMap = new Map<string, any>();
     for (const con of consumers) {
       const key = `${con.peerHost}:${con.peerPort}`;
@@ -652,7 +660,6 @@ app.get("/dashboard", async (c) => {
   }
 });
 
-// COMPAT: This serves the missing endpoint requested by frontend layout polling grids
 app.get("/queue-peek", async (c) => {
   try {
     const stats = await withCache("stats", 4_000, computeStats);
@@ -668,7 +675,8 @@ app.get("/queue-peek", async (c) => {
 app.get("/main_page", async (c) => {
   const pageIdx = Number(c.req.query("pageIdx") ?? 0);
   const tagFilter = c.req.query("tag");
-  const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
+
+  const limit = Math.min(Number(c.req.query("limit") ?? 50), 500);
   const offset = pageIdx * limit;
 
   const whereClause = tagFilter
@@ -706,12 +714,10 @@ app.get("/main_page", async (c) => {
   c.header("X-Total-Count", String(countRes[0].count));
   c.header("X-Page-Count", String(pageCountRes[0].count));
 
-  const resModed = await Promise.all(
-    res.map(async (file) => ({
-      ...file,
-      banner_img: `${await resolveS3BaseUrl(true)}/${BucketNames.bannerImgs}/${file.banner_img}`,
-    })),
-  );
+  const resModed = res.map((file) => ({
+    ...file,
+    banner_img: bannerImgRelativePath(file.banner_img),
+  }));
   return c.json(resModed);
 });
 
@@ -822,12 +828,11 @@ app.get("/pages", async (c) => {
     .where(eq(documentsTable.fileS3Key, filepath))
     .orderBy(asc(pagesTable.page_idx));
 
-  const resModed = await Promise.all(
-    res.map(async (file) => ({
-      ...file,
-      banner_img: `${await resolveS3BaseUrl(true)}/${BucketNames.bannerImgs}/${file.banner_img}`,
-    })),
-  );
+
+  const resModed = res.map((file) => ({
+    ...file,
+    banner_img: bannerImgRelativePath(file.banner_img),
+  }));
   return c.json({ pages: resModed, total: res.length, filepath });
 });
 
@@ -963,7 +968,7 @@ app.get("/download", async (c) => {
     ? BucketNames.bannerImgs
     : BucketNames.userUploads;
 
-  // Construct the full S3 URL
+
   const s3Url = `${await resolveS3BaseUrl(true)}${bucketName}/${fileKey}`;
 
   let res: Response;

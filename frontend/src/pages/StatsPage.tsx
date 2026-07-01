@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getDashboard } from "../api/client";
+import { useAllReminders, markReminderDone, type GlobalReminder } from "../store/localData";
+import { useI18n } from "../i18n";
 
 function fmt(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -184,6 +187,7 @@ function Stat({
 
 /* ── worker card ──────────────────────────────────────────────────── */
 function WorkerCard({ worker, type }: { worker: any; type: "ocr" | "merge" }) {
+  const t = useI18n();
   const isActive = worker.active || worker.ack_per_sec > 0;
   return (
     <div
@@ -221,10 +225,10 @@ function WorkerCard({ worker, type }: { worker: any; type: "ocr" | "merge" }) {
           {worker.peerHost ?? worker.ip ?? worker.id}
         </p>
         <p style={{ margin: 0, fontSize: "0.65rem", color: "var(--text-3)" }}>
-          {type === "ocr" ? "OCR" : "Merge"} · pf {worker.prefetch ?? "—"}
+          {type === "ocr" ? t.st_ocr : t.st_merge} · {t.st_pf(worker.prefetch ?? "—")}
           {worker.unacked > 0 && (
             <span style={{ color: "var(--warn)", marginLeft: 6 }}>
-              {worker.unacked} unacked
+              {t.st_unacked(worker.unacked)}
             </span>
           )}
         </p>
@@ -239,8 +243,8 @@ function WorkerCard({ worker, type }: { worker: any; type: "ocr" | "merge" }) {
           }}
         >
           {worker.ack_per_sec > 0
-            ? `${worker.ack_per_sec.toFixed(2)}/s`
-            : "idle"}
+            ? t.st_perSec(worker.ack_per_sec.toFixed(2))
+            : t.st_idle}
         </p>
       </div>
     </div>
@@ -251,13 +255,46 @@ function WorkerCard({ worker, type }: { worker: any; type: "ocr" | "merge" }) {
 function Section({
   label,
   children,
+  defaultOpen = true,
 }: {
   label: string;
   children: React.ReactNode;
+  defaultOpen?: boolean;
 }) {
+  const storageKey = `rain-dms-stats-section:${label}`;
+  const [open, setOpen] = useState(() => {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      return stored === null ? defaultOpen : stored === "1";
+    } catch {
+      return defaultOpen;
+    }
+  });
+
+  function toggle() {
+    setOpen((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(storageKey, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
+
   return (
     <div style={{ marginBottom: 24 }}>
       <h3
+        onClick={toggle}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggle();
+          }
+        }}
         style={{
           margin: "0 0 10px",
           fontSize: "0.72rem",
@@ -268,17 +305,100 @@ function Section({
           display: "flex",
           alignItems: "center",
           gap: 8,
+          cursor: "pointer",
+          userSelect: "none",
         }}
       >
+        <svg
+          width="9"
+          height="9"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          style={{
+            transform: open ? "rotate(90deg)" : "rotate(0deg)",
+            transition: "transform 0.14s ease",
+            flexShrink: 0,
+          }}
+        >
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
         {label}
         <div style={{ flex: 1, height: 1, background: "var(--border-soft)" }} />
       </h3>
-      {children}
+      {open && children}
+    </div>
+  );
+}
+
+function ReminderRow({
+  reminder,
+  onOpen,
+}: {
+  reminder: GlobalReminder;
+  onOpen: (path: string) => void;
+}) {
+  const t = useI18n();
+  const name = reminder.filepath.split("/").pop() ?? reminder.filepath;
+  const isOverdue = reminder.at ? new Date(reminder.at).getTime() < Date.now() : false;
+
+  return (
+    <div
+      className="card-sm"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "8px 12px",
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p
+          style={{
+            margin: 0,
+            fontSize: "0.78rem",
+            fontWeight: 600,
+            color: "var(--text-1)",
+            fontFamily: "JetBrains Mono, monospace",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+          title={reminder.filepath}
+        >
+          {name}
+        </p>
+        <p style={{ margin: "2px 0 0", fontSize: "0.68rem", color: isOverdue ? "var(--danger)" : "var(--text-3)" }}>
+          {reminder.at
+            ? new Date(reminder.at).toLocaleString()
+            : t.st_reminderNoDate}
+          {isOverdue && ` · ${t.st_reminderOverdue}`}
+          {reminder.note ? ` · ${reminder.note}` : ""}
+        </p>
+      </div>
+      <button
+        className="btn btn-ghost"
+        style={{ fontSize: "0.7rem", padding: "3px 9px", flexShrink: 0 }}
+        onClick={() => markReminderDone(reminder.filepath)}
+      >
+        {t.st_reminderMarkDone}
+      </button>
+      <button
+        className="btn btn-ghost"
+        style={{ fontSize: "0.7rem", padding: "3px 9px", flexShrink: 0 }}
+        onClick={() =>
+          onOpen(`/document?filepath=${encodeURIComponent(reminder.filepath)}`)
+        }
+      >
+        {t.st_reminderOpenFile}
+      </button>
     </div>
   );
 }
 
 export default function StatsPage() {
+  const t = useI18n();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -299,8 +419,33 @@ export default function StatsPage() {
   }
   useEffect(() => {
     load();
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
+    let t: ReturnType<typeof setInterval> | null = null;
+
+    function startPolling() {
+      if (t) return;
+      t = setInterval(load, 5000);
+    }
+    function stopPolling() {
+      if (t) {
+        clearInterval(t);
+        t = null;
+      }
+    }
+    function onVisibility() {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        load(); // catch up immediately instead of waiting for the next tick
+        startPolling();
+      }
+    }
+
+    startPolling();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stopPolling();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, []);
 
   const s = data?.stats ?? {};
@@ -310,6 +455,19 @@ export default function StatsPage() {
   const sparkline: number[] = s.sparkline ?? [];
   const byExt: Record<string, number> = s.by_extension ?? {};
   const biggestFiles: any[] = s.biggest_files ?? [];
+  const downloads = data?.downloads ?? {};
+  const downloadWorkers: any[] = downloads.workers ?? [];
+
+  const nav = useNavigate();
+  const allReminders = useAllReminders();
+  const pendingReminders = allReminders
+    .filter((r) => !r.done_at)
+    .sort((a, b) => {
+      if (!a.at && !b.at) return 0;
+      if (!a.at) return 1;
+      if (!b.at) return -1;
+      return new Date(a.at).getTime() - new Date(b.at).getTime();
+    });
 
   // Estimated avg webp size — based on page count assumption
   const avgWebpKb =
@@ -345,7 +503,7 @@ export default function StatsPage() {
             color: "var(--text-1)",
           }}
         >
-          System Stats
+          {t.st_title}
         </h2>
         <button
           className="btn btn-ghost"
@@ -353,7 +511,7 @@ export default function StatsPage() {
           disabled={loading}
           style={{ fontSize: "0.72rem", padding: "3px 8px" }}
         >
-          {loading ? "…" : "↻ Refresh"}
+          {loading ? "…" : t.st_refresh}
         </button>
         {lastRefresh && (
           <span
@@ -363,7 +521,7 @@ export default function StatsPage() {
               fontFamily: "JetBrains Mono, monospace",
             }}
           >
-            auto-refresh 5s · last {lastRefresh.toLocaleTimeString()}
+            {t.st_autoRefresh} · {t.st_last(lastRefresh.toLocaleTimeString())}
           </span>
         )}
       </div>
@@ -384,8 +542,19 @@ export default function StatsPage() {
         </div>
       )}
 
+      {/* Pending reminders — aggregated across every file's local reminder */}
+      {pendingReminders.length > 0 && (
+        <Section label={t.st_reminders} defaultOpen={true}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {pendingReminders.map((r) => (
+              <ReminderRow key={r.filepath} reminder={r} onOpen={nav} />
+            ))}
+          </div>
+        </Section>
+      )}
+
       {/* Documents */}
-      <Section label="Documents">
+      <Section label={t.st_documents}>
         <div
           style={{
             display: "grid",
@@ -395,38 +564,38 @@ export default function StatsPage() {
           }}
         >
           <Stat
-            label="Total"
+            label={t.st_total}
             value={<AnimNum value={s.total_documents ?? 0} />}
             accent
           />
-          <Stat label="+1h" value={<AnimNum value={s.added_last_1h ?? 0} />} />
+          <Stat label={t.st_1h} value={<AnimNum value={s.added_last_1h ?? 0} />} />
           <Stat
-            label="+24h"
+            label={t.st_24h}
             value={<AnimNum value={s.added_last_24h ?? 0} />}
           />
-          <Stat label="+7d" value={<AnimNum value={s.added_last_7d ?? 0} />} />
+          <Stat label={t.st_7d} value={<AnimNum value={s.added_last_7d ?? 0} />} />
           <Stat
-            label="+30d"
+            label={t.st_30d}
             value={<AnimNum value={s.added_last_30d ?? 0} />}
           />
           <Stat
-            label="Total pages"
+            label={t.st_totalPages}
             value={<AnimNum value={s.total_pages ?? 0} />}
-            sub={`avg ${s.avg_pages_per_doc?.toFixed(1) ?? "—"} p/doc`}
+            sub={t.st_avgPages(s.avg_pages_per_doc?.toFixed(1) ?? "—")}
           />
           <Stat
-            label="OCR coverage"
+            label={t.st_ocrCoverage}
             value={
               s.ocr_coverage_pct != null ? <>{s.ocr_coverage_pct}%</> : "—"
             }
-            sub={`${s.pages_with_ocr ?? 0} / ${s.total_pages ?? 0} pages`}
+            sub={t.st_ocrPages(s.pages_with_ocr ?? 0, s.total_pages ?? 0)}
             accent={s.ocr_coverage_pct === 100}
             warn={s.ocr_coverage_pct != null && s.ocr_coverage_pct < 50}
           />
           <Stat
-            label="Est. storage"
+            label={t.st_storage}
             value={fmt(s.total_size_bytes ?? 0)}
-            sub={avgWebpKb ? `~${avgWebpKb} KB/page` : undefined}
+            sub={avgWebpKb ? t.st_kbPerPage(avgWebpKb) : undefined}
             mono
           />
         </div>
@@ -444,7 +613,7 @@ export default function StatsPage() {
                 letterSpacing: "0.07em",
               }}
             >
-              Documents added — last 24h (by hour)
+              {t.st_sparkline}
             </p>
             <Sparkline data={sparkline} />
           </div>
@@ -452,7 +621,7 @@ export default function StatsPage() {
       </Section>
 
       {/* OCR Pipeline */}
-      <Section label="OCR Pipeline">
+      <Section label={t.st_ocrPipeline}>
         <div
           style={{
             display: "grid",
@@ -462,27 +631,27 @@ export default function StatsPage() {
           }}
         >
           <Stat
-            label="OCR queue"
+            label={t.st_ocrQueue}
             value={<AnimNum value={ocrQueueLen} />}
             warn={ocrQueueLen > 20}
             mono
           />
           <Stat
-            label="Merge queue"
+            label={t.st_mergeQueue}
             value={<AnimNum value={mergeQueueLen} />}
             warn={mergeQueueLen > 10}
             mono
           />
           <Stat
-            label="Processing"
+            label={t.st_processing}
             value={<AnimNum value={s.currently_processing ?? 0} />}
             accent={s.currently_processing > 0}
             mono
           />
-          <Stat label="30s rate" value={fmtRate(rate30)} mono />
-          <Stat label="60s rate" value={fmtRate(rate60)} mono />
+          <Stat label={t.st_rate30} value={fmtRate(rate30)} mono />
+          <Stat label={t.st_rate60} value={fmtRate(rate60)} mono />
           <Stat
-            label="ETA"
+            label={t.st_eta}
             value={etaSecs != null ? fmtEta(etaSecs) : "—"}
             warn={etaSecs != null && etaSecs > 600}
             mono
@@ -514,7 +683,7 @@ export default function StatsPage() {
                   fontWeight: 600,
                 }}
               >
-                OCR queue
+                {t.st_ocrQueue}
               </span>
               <span
                 style={{
@@ -523,7 +692,7 @@ export default function StatsPage() {
                   fontFamily: "JetBrains Mono, monospace",
                 }}
               >
-                {ocrQueueLen} jobs
+                {t.st_jobs(ocrQueueLen)}
               </span>
             </div>
             <QueueBar value={ocrQueueLen} max={maxForBar} warn />
@@ -543,7 +712,7 @@ export default function StatsPage() {
                   fontWeight: 600,
                 }}
               >
-                Merge queue
+                {t.st_mergeQueue}
               </span>
               <span
                 style={{
@@ -552,7 +721,7 @@ export default function StatsPage() {
                   fontFamily: "JetBrains Mono, monospace",
                 }}
               >
-                {mergeQueueLen} jobs
+                {t.st_jobs(mergeQueueLen)}
               </span>
             </div>
             <QueueBar value={mergeQueueLen} max={maxForBar} />
@@ -573,7 +742,7 @@ export default function StatsPage() {
                     fontWeight: 600,
                   }}
                 >
-                  Throughput (30s vs 60s)
+                  {t.st_throughput}
                 </span>
                 <span
                   style={{
@@ -613,7 +782,7 @@ export default function StatsPage() {
       {/* Workers */}
       {(ocrWorkers.length > 0 || mergeWorkers.length > 0) && (
         <Section
-          label={`Workers (${ocrWorkers.length} OCR · ${mergeWorkers.length} merge)`}
+          label={t.st_workers(ocrWorkers.length, mergeWorkers.length)}
         >
           <div
             style={{
@@ -632,9 +801,89 @@ export default function StatsPage() {
         </Section>
       )}
 
+      {/* Agent downloads — worker-side S3 fetch activity */}
+      {downloadWorkers.length > 0 && (
+        <Section label={t.st_downloads}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(140px,1fr))",
+              gap: 10,
+              marginBottom: 10,
+            }}
+          >
+            <Stat
+              label={t.st_downloadsTotal}
+              value={<AnimNum value={downloads.total ?? 0} />}
+              accent
+            />
+            <Stat label={t.st_downloadsBytes} value={fmt(downloads.total_bytes ?? 0)} mono />
+            <Stat
+              label={t.st_downloadsRate}
+              value={`${fmtRate(downloads.summary?.agent_downloads_per_minute_30s)} · ${fmtRate(downloads.summary?.agent_downloads_per_minute_60s)}`}
+              mono
+            />
+            <Stat
+              label={t.st_downloadsInFlight}
+              value={<AnimNum value={downloads.summary?.in_flight ?? 0} />}
+            />
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+              gap: 8,
+            }}
+          >
+            {downloadWorkers.map((w: any) => (
+              <div key={w.id} className="card-sm" style={{ padding: "9px 11px" }}>
+                <p
+                  style={{
+                    margin: "0 0 4px",
+                    fontSize: "0.72rem",
+                    fontWeight: 600,
+                    color: "var(--text-1)",
+                    fontFamily: "JetBrains Mono, monospace",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                  title={w.ip}
+                >
+                  {w.ip ?? w.tag}
+                </p>
+                <p style={{ margin: 0, fontSize: "0.66rem", color: "var(--text-3)" }}>
+                  {w.downloads} dl · {fmt(w.bytes ?? 0)}
+                </p>
+                {Array.isArray(w.recent_files) && w.recent_files.length > 0 ? (
+                  <p
+                    style={{
+                      margin: "4px 0 0",
+                      fontSize: "0.6rem",
+                      color: "var(--text-3)",
+                      fontFamily: "JetBrains Mono, monospace",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                    title={w.recent_files.join(", ")}
+                  >
+                    {t.st_downloadsRecent}: {w.recent_files.slice(0, 2).join(", ")}
+                  </p>
+                ) : (
+                  <p style={{ margin: "4px 0 0", fontSize: "0.6rem", color: "var(--text-3)" }}>
+                    {t.st_downloadsNoRecent}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
       {/* File breakdown */}
       {Object.keys(byExt).length > 0 && (
-        <Section label="By extension">
+        <Section label={t.st_byExt}>
           <div
             className="card"
             style={{
@@ -706,7 +955,7 @@ export default function StatsPage() {
 
       {/* Biggest files */}
       {biggestFiles.length > 0 && (
-        <Section label="Largest files (by page count)">
+        <Section label={t.st_biggest}>
           <div
             className="card"
             style={{

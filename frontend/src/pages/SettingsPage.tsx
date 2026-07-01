@@ -128,12 +128,13 @@ function Toggle({
 }
 
 const ACCENT_LABELS: Record<AccentKey, string> = {
+  amber: "Amber",
   teal: "Teal",
   sky: "Sky",
   violet: "Violet",
-  amber: "Amber",
   rose: "Rose",
   lime: "Lime",
+  custom: "Custom",
 };
 
 export default function SettingsPage() {
@@ -143,6 +144,10 @@ export default function SettingsPage() {
   const setApiUrl = useSettingsStore((s) => s.setApiUrl);
   const accent = useSettingsStore((s) => s.accent);
   const setAccent = useSettingsStore((s) => s.setAccent);
+  const customAccent = useSettingsStore((s) => s.customAccent);
+  const setCustomAccent = useSettingsStore((s) => s.setCustomAccent);
+  const urlSubstitutions = useSettingsStore((s) => s.urlSubstitutions);
+  const removeUrlSubstitution = useSettingsStore((s) => s.removeUrlSubstitution);
   const simulatedTagPaths = useSettingsStore((s) => s.simulatedTagPaths);
   const setSimulatedTagPaths = useSettingsStore((s) => s.setSimulatedTagPaths);
   const lang = useSettingsStore((s) => s.lang);
@@ -294,10 +299,10 @@ export default function SettingsPage() {
               color: "var(--text-1)",
             }}
           >
-            Accent colour
+            {t.st_accent}
           </p>
-          <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
-            {(Object.keys(ACCENT_PRESETS) as AccentKey[]).map((key) => {
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+            {(Object.keys(ACCENT_PRESETS) as (keyof typeof ACCENT_PRESETS)[]).map((key) => {
               const p = ACCENT_PRESETS[key];
               const active = accent === key;
               return (
@@ -339,6 +344,58 @@ export default function SettingsPage() {
                 </button>
               );
             })}
+
+            {/* Custom accent — any color, palette derived automatically */}
+            <label
+              title={t.st_accentCustom}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "5px 11px",
+                border: `2px solid ${accent === "custom" ? (customAccent ?? "var(--accent)") : "transparent"}`,
+                borderRadius: 7,
+                background: accent === "custom" ? "var(--accent-glow)" : "var(--bg-raised)",
+                cursor: "pointer",
+                transition: "all 0.15s",
+              }}
+            >
+              <span
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: "50%",
+                  background:
+                    accent === "custom" && customAccent ? customAccent : "conic-gradient(from 0deg, #f59e0b, #fb7185, #a78bfa, #38bdf8, #84cc16, #f59e0b)",
+                  flexShrink: 0,
+                  position: "relative",
+                  overflow: "hidden",
+                }}
+              >
+                <input
+                  type="color"
+                  value={customAccent ?? "#e8973a"}
+                  onChange={(e) => setCustomAccent(e.target.value)}
+                  style={{
+                    position: "absolute",
+                    inset: -4,
+                    opacity: 0,
+                    cursor: "pointer",
+                    width: 18,
+                    height: 18,
+                  }}
+                />
+              </span>
+              <span
+                style={{
+                  fontSize: "0.75rem",
+                  fontWeight: 500,
+                  color: accent === "custom" ? "var(--accent)" : "var(--text-2)",
+                }}
+              >
+                {t.st_accentCustom}
+              </span>
+            </label>
           </div>
           <p
             style={{
@@ -347,13 +404,73 @@ export default function SettingsPage() {
               color: "var(--text-3)",
             }}
           >
-            Changes apply instantly and persist across sessions.
+            {t.st_accentHint} {t.st_accentCustomHint}
           </p>
         </div>
       </Section>
 
+      {/* Base URL substitutions — CORS fix for banner images / downloads */}
+      <Section title={t.st_urlSubs}>
+        <div style={{ padding: "12px 14px" }}>
+          <p
+            style={{
+              margin: "0 0 10px",
+              fontSize: "0.72rem",
+              color: "var(--text-3)",
+              lineHeight: 1.5,
+            }}
+          >
+            {t.st_urlSubsHint}
+          </p>
+          {urlSubstitutions.length === 0 ? (
+            <p style={{ margin: 0, fontSize: "0.76rem", color: "var(--text-3)" }}>
+              {t.st_urlSubsEmpty}
+            </p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {urlSubstitutions.map((sub) => (
+                <div
+                  key={sub.from}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "7px 10px",
+                    background: "var(--bg-raised)",
+                    border: "1px solid var(--border-soft)",
+                    borderRadius: 7,
+                    fontSize: "0.72rem",
+                    fontFamily: "JetBrains Mono, monospace",
+                  }}
+                >
+                  <span style={{ color: "var(--text-2)", wordBreak: "break-all" }}>
+                    {sub.from}
+                  </span>
+                  <span style={{ color: "var(--text-3)", flexShrink: 0 }}>→</span>
+                  <span style={{ color: "var(--accent)", wordBreak: "break-all", flex: 1 }}>
+                    {sub.to}
+                  </span>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => removeUrlSubstitution(sub.from)}
+                    style={{
+                      fontSize: "0.68rem",
+                      padding: "2px 8px",
+                      color: "var(--danger)",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {t.st_urlSubsRevoke}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Section>
+
       {/* Simulated tag structure */}
-      <Section title="Tree — Simulated folders">
+      <Section title={t.st_tree}>
         <div style={{ padding: "12px 14px" }}>
           <p
             style={{

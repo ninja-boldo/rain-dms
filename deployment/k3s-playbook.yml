@@ -12,10 +12,6 @@
         user: "{{ ansible_user }}"
         key: "{{ lookup('file', '~/.ssh/id_ed25519.pub') }}"
 
-    - name: Set proper hostname
-      ansible.builtin.hostname:
-        name: home-server
-    
     - name: install deps via apt
       apt:
         name:
@@ -24,13 +20,21 @@
           - iptables
           - curl
 
+    - name: add custom root ca
+      ansible.builtin.copy:
+        src: '../docker/certs/rootCA.pem'
+        dest: '/usr/local/share/ca-certificates/rootCA.pem'
+
+    - name: trust rain dms root ca-volume
+      ansible.builtin.command: update-ca-certificates
+
     - name: Install K3s server
       ansible.builtin.shell: |
         curl -sfL https://get.k3s.io | \
         INSTALL_K3S_EXEC="--flannel-backend=none --disable-network-policy" sh -
       args:
         creates: /etc/systemd/system/k3s.service
-    
+
     - name: Ensure K3s service is started and enabled
       ansible.builtin.systemd:
         name: k3s
@@ -38,7 +42,7 @@
         enabled: true
         daemon_reload: true
 
-    - name: Wait for K3s API to be stable
+    - name: Wait for K3s API to be ready
       ansible.builtin.shell: |
         kubectl get --raw /readyz
       register: result
@@ -46,17 +50,11 @@
       retries: 30
       delay: 5
       environment:
-        KUBECONFIG: /etc/rancher/k3s/k3s.yaml                 
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
     - name: Install Helm
       ansible.builtin.shell: |
         curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-
-    - name: Wait for K3s API to be ready
-      ansible.builtin.wait_for:
-        host: 127.0.0.1
-        port: 6443
-        timeout: 120
 
     - name: Add Calico operator
       ansible.builtin.shell: |
@@ -66,13 +64,15 @@
 
     - name: Install Calico
       ansible.builtin.shell: |
-        cat <<EOF | kubectl apply -f -
+        cat <<EOF | kubectl apply --validate=false -f -
         apiVersion: operator.tigera.io/v1
         kind: Installation
         metadata:
           name: default
         spec:
           calicoNetwork:
+            nodeAddressAutodetectionV4:
+              interface: "en.*|eth.*"
             ipPools:
             - cidr: 10.42.0.0/16
               encapsulation: VXLAN
@@ -80,18 +80,29 @@
       environment:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
+    - name: Wait for Tigera Operator deployment to be available
+      ansible.builtin.shell: |
+        kubectl wait --namespace tigera-operator deployment/tigera-operator --for=condition=Available --timeout=90s
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      changed_when: false
+
+    - name: Wait for Calico node pods to be created and ready
+      ansible.builtin.shell: |
+        kubectl wait --namespace calico-system pods --selector=k8s-app=calico-node --for=condition=Ready --timeout=30s
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      register: calico_ready
+      until: calico_ready.rc == 0
+      retries: 12
+      delay: 15
+      failed_when: calico_ready.rc != 0 and "no matching resources found" not in calico_ready.stderr
+      changed_when: false
+
     - name: Add KEDA Helm repository
       kubernetes.core.helm_repository:
         name: kedacore
         repo_url: https://kedacore.github.io/charts
-        state: present
-      environment:
-        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
-
-    - name: Add Kyverno Helm repository
-      kubernetes.core.helm_repository:
-        name: kyverno
-        repo_url: https://kyverno.github.io/kyverno/
         state: present
       environment:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
@@ -105,17 +116,18 @@
       environment:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
-    - name: Create KEDA CA configmap
+    - name: Create KEDA CA Secret
       kubernetes.core.k8s:
         state: present
         definition:
           apiVersion: v1
-          kind: ConfigMap
+          kind: Secret
           metadata:
-            name: custom-ca
+            name: keda-custom-ca
             namespace: keda
+          type: Opaque
           data:
-            ca.crt: "{{ lookup('file', '../docker/certs/rootCA.pem') }}"
+            ca.crt: "{{ lookup('file', '../docker/certs/rootCA.pem') | b64encode }}"
       environment:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
@@ -127,29 +139,28 @@
         create_namespace: true
         update_repo_cache: true
         values:
-          extraVolumes:
-            - name: custom-ca
-              configMap:
-                name: custom-ca
-          extraVolumeMounts:
-            - name: custom-ca
-              mountPath: /etc/keda/tls/ca.crt
-              subPath: ca.crt
-          env:
-            - name: SSL_CERT_FILE
-              value: /etc/keda/tls/ca.crt
+          volumes:
+            keda:
+              extraVolumes:
+                - name: custom-ca
+                  secret:
+                    secretName: keda-custom-ca
+              extraVolumeMounts:
+                - name: custom-ca
+                  mountPath: /custom/ca
+                  readOnly: true
+            metricsApiServer:
+              extraVolumes:
+                - name: custom-ca
+                  secret:
+                    secretName: keda-custom-ca
+              extraVolumeMounts:
+                - name: custom-ca
+                  mountPath: /custom/ca
+                  readOnly: true
       environment:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
-    - name: Install Kyverno via Helm
-      kubernetes.core.helm:
-        name: kyverno
-        chart_ref: kyverno/kyverno
-        release_namespace: kyverno
-        create_namespace: true
-        update_repo_cache: true
-      environment:
-        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
     - name: Wait for node token
       ansible.builtin.wait_for:
@@ -164,27 +175,24 @@
     - name: Store cluster connection facts
       ansible.builtin.set_fact:
         k3s_token: "{{ raw_token.content | b64decode | trim }}"
-        orchestrator_ip: >-
-          {{
-            ansible_host
-            | default(ansible_default_ipv4.address)
-          }}
+        orchestrator_ip: "{{ ansible_host | default(inventory_hostname) }}"
 
     - name: Verify K3s server install
       ansible.builtin.command: k3s --version
       register: k3s_version
       changed_when: false
 
-    - name: Fetch kubeconfig from orchestrator
-      ansible.builtin.fetch:
-        src: /etc/rancher/k3s/k3s.yaml
-        dest: ./kubeconfig
-        flat: true
     - name: Replace localhost in kubeconfig
       ansible.builtin.replace:
         path: /etc/rancher/k3s/k3s.yaml
         regexp: "https://127.0.0.1:6443"
         replace: "https://{{ orchestrator_ip }}:6443"
+
+    - name: Fetch kubeconfig from orchestrator
+      ansible.builtin.fetch:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: ./kubeconfig
+        flat: true
 
     - name: Show K3s server version
       ansible.builtin.debug:
@@ -267,6 +275,10 @@
 
     - name: Install curl
       ansible.builtin.apt:
+        name: curl
+        state: present
+        update_cache: true
+
     - name: Wait for orchestrator API to become reachable
       ansible.builtin.wait_for:
         host: "{{ hostvars[master_host].orchestrator_ip }}"

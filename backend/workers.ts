@@ -7,9 +7,9 @@ import { fileURLToPath } from "url";
 import fs from "fs";
 import dotenv from "dotenv";
 import { inspect } from "util";
-import { getS3Client, initBuckets } from "./workers/ocr/utils";
 import { S3Client } from "@aws-sdk/client-s3";
-import { getConsumePath } from "./utils/utils";
+import { getConsumePath } from "./utils/other/utils";
+import { getS3Client, initBuckets } from "./utils/other/s3Helpers";
 
 dotenv.config();
 

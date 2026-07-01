@@ -6,7 +6,10 @@ import {
   QueueNames,
   QueueObjProcessOcrResult,
 } from "../utils/types/main";
-import { QueueHandler, PermanentFailureError } from "../utils/helperClasses/QueueConnector";
+import {
+  QueueHandler,
+  PermanentFailureError,
+} from "../utils/helperClasses/QueueConnector";
 import {
   documentsTable,
   fileKeyTempTable,

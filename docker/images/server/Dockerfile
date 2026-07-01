@@ -11,10 +11,10 @@ WORKDIR /app
 
 COPY package.json bun.lock ./
 COPY ../backend ./backend/
-RUN rm -rf backend/node_modules
-COPY ../frontend/dist ./frontend/dist
 
-RUN cd backend && bun install --frozen-lockfile
+RUN cd backend && \
+    bun remove gl ppu-paddle-ocr sharp && \
+    bun install --frozen-lockfile
 
 WORKDIR /app/backend
 

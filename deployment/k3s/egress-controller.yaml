@@ -1,0 +1,36 @@
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkSet
+metadata:
+  name: ip-allow-list
+  labels:
+    ip-trusted: "true"
+spec:
+  nets:
+    - 192.168.1.0/24
+
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: egress-strict-allowlist
+spec:
+  selector: apply-ip-protect == 'true'
+  order: 0
+  types:
+    - Egress
+  egress:
+    # allow all internal cluster-to-cluster traffic
+    - action: Allow
+      destination:
+        selector: has(projectcalico.org/namespace)
+
+    # allow DNS resolution
+    - action: Allow
+      protocol: UDP
+      destination:
+        ports: [53]
+
+    # allow egress only to trusted address range X
+    - action: Allow
+      destination:
+        selector: ip-trusted == 'true' && !has(projectcalico.org/namespace)
