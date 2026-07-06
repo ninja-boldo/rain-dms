@@ -66,7 +66,8 @@ function fmtDuration(
   if (diffMs < 0) return null;
   if (diffMs < 1000) return `${diffMs}ms`;
   if (diffMs < 60_000) return `${(diffMs / 1000).toFixed(1)}s`;
-  if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m ${Math.round((diffMs % 60_000) / 1000)}s`;
+  if (diffMs < 3_600_000)
+    return `${Math.floor(diffMs / 60_000)}m ${Math.round((diffMs % 60_000) / 1000)}s`;
   return `${Math.floor(diffMs / 3_600_000)}h ${Math.floor((diffMs % 3_600_000) / 60_000)}m`;
 }
 
@@ -169,10 +170,7 @@ export default function FileStatsPage() {
   }
 
   function clearMarkers() {
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm(t.fs_removeAllConfirm)
-    )
+    if (typeof window !== "undefined" && !window.confirm(t.fs_removeAllConfirm))
       return;
     setMarkers([]);
   }
@@ -345,7 +343,9 @@ export default function FileStatsPage() {
                   <button
                     onClick={() => {
                       if (filepath) {
-                        navigator.clipboard?.writeText(filepath).catch(() => {});
+                        navigator.clipboard
+                          ?.writeText(filepath)
+                          .catch(() => {});
                         reportSuccess(t.toast_success, filepath);
                       }
                     }}
@@ -473,7 +473,10 @@ export default function FileStatsPage() {
                 >
                   {fmtDate(reminder.at)}
                   {reminder.done_at && (
-                    <> · {t.fs_done.toLowerCase()} {fmtRel(reminder.done_at)}</>
+                    <>
+                      {" "}
+                      · {t.fs_done.toLowerCase()} {fmtRel(reminder.done_at)}
+                    </>
                   )}
                 </p>
               )}

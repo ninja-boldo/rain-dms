@@ -184,19 +184,14 @@ export async function checkUserIsExisting(username: string): Promise<boolean> {
 }
 let _cachedToken: string | null = null;
 let _tokenExpiresAt = 0;
-let _oldSecret: string | null = null;
 
-const TOKEN_TTL_S = 1800;
+const TOKEN_TTL_S = 600;
 
 export function getAuthHeader(): Headers {
   const secret = getClusterSecret();
   const now = Math.floor(Date.now() / 1000);
 
-  const secondsRemaining = _cachedToken ? _tokenExpiresAt - now : 0;
-
-  if (!_cachedToken || now >= _tokenExpiresAt - 600) {
-    const oldToken = _cachedToken;
-
+  if (!_cachedToken || now >= _tokenExpiresAt - 60) {
     _tokenExpiresAt = now + TOKEN_TTL_S;
     const newToken: string = sign(
       {
@@ -208,11 +203,6 @@ export function getAuthHeader(): Headers {
       secret,
     );
 
-    console.log(`[AUTH-REFRESH] Regenerated token. 
-      Time remaining on old token was: ${secondsRemaining}s. 
-      Secret matched old secret: ${_oldSecret === secret}`);
-
-    _oldSecret = secret;
     _cachedToken = newToken;
   }
 

@@ -281,7 +281,12 @@ function FlatHit({
     >
       {hit.pageIdx === 0 && hit.banner_img && (
         <div
-          style={{ width: 56, height: 80, flexShrink: 0, background: "var(--bg-raised)" }}
+          style={{
+            width: 56,
+            height: 80,
+            flexShrink: 0,
+            background: "var(--bg-raised)",
+          }}
         >
           <AuthImage
             src={hit.banner_img}
@@ -599,11 +604,11 @@ export default function SearchPage() {
   const distinctFiles = new Set(hits.map((h) => h.filepath)).size;
 
   return (
-    <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
+    <div className="split-panel" style={{ height: "100%", overflow: "hidden" }}>
       {/* Main column */}
       <div
+        className="split-primary"
         style={{
-          flex: 1,
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
@@ -755,8 +760,10 @@ export default function SearchPage() {
           )}
 
           {/* Date filters */}
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <div style={{ flex: 1 }}>
+          <div
+            style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}
+          >
+            <div style={{ flex: "1 1 120px" }}>
               <label className="label">{t.sr_after}</label>
               <input
                 className="input"
@@ -765,7 +772,7 @@ export default function SearchPage() {
                 onChange={(e) => setCreatedAfter(e.target.value)}
               />
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: "1 1 120px" }}>
               <label className="label">{t.sr_before}</label>
               <input
                 className="input"
@@ -882,6 +889,88 @@ export default function SearchPage() {
             gap: 8,
           }}
         >
+          {!query && !result && !loading && (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "40px 20px",
+                color: "var(--text-3)",
+                maxWidth: 440,
+                margin: "0 auto",
+              }}
+            >
+              <div style={{ color: "var(--accent)", marginBottom: 10 }}>
+                <svg
+                  width="34"
+                  height="34"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{ margin: "0 auto" }}
+                >
+                  <circle cx="11" cy="11" r="7" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </div>
+              <p
+                style={{
+                  margin: "0 0 4px",
+                  fontSize: "0.95rem",
+                  fontWeight: 600,
+                  color: "var(--text-1)",
+                }}
+              >
+                {t.sr_welcomeTitle}
+              </p>
+              <p
+                style={{
+                  margin: "0 0 16px",
+                  fontSize: "0.78rem",
+                  lineHeight: 1.5,
+                }}
+              >
+                {t.sr_welcomeBody}
+              </p>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 6,
+                  justifyContent: "center",
+                }}
+              >
+                {[
+                  { label: t.sr_exTag, value: "tag:invoices" },
+                  { label: t.sr_exExclude, value: "report -draft" },
+                  { label: t.sr_exPhrase, value: '"quarterly summary"' },
+                ].map((ex) => (
+                  <button
+                    key={ex.value}
+                    onClick={() => {
+                      setQuery(ex.value);
+                      doSearch(ex.value);
+                    }}
+                    title={ex.value}
+                    style={{
+                      background: "var(--bg-raised)",
+                      border: "1px solid var(--border-soft)",
+                      borderRadius: 999,
+                      cursor: "pointer",
+                      color: "var(--text-2)",
+                      fontSize: "0.7rem",
+                      padding: "4px 12px",
+                    }}
+                  >
+                    {ex.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {error && (
             <div
               style={{
@@ -954,6 +1043,7 @@ export default function SearchPage() {
       {/* Tag facet sidebar */}
       {tagFacets.length > 0 && (
         <aside
+          className="split-secondary"
           style={{
             width: 160,
             flexShrink: 0,
@@ -961,6 +1051,7 @@ export default function SearchPage() {
             padding: "12px 6px",
             overflowY: "auto",
             background: "var(--bg-surface)",
+            maxHeight: "40vh",
           }}
         >
           <p className="label" style={{ paddingLeft: 4, marginBottom: 6 }}>

@@ -227,7 +227,9 @@ export async function uploadFile(
 // ── binary / image fetch with auth ───────────────────────────────────────────
 
 export async function fetchBinary(url: string): Promise<Response> {
-  const res = await fetch(applyUrlSubstitutions(url), { headers: authHeaders() });
+  const res = await fetch(applyUrlSubstitutions(url), {
+    headers: authHeaders(),
+  });
   if (!res.ok) handleUnauth(res.status);
   return res;
 }

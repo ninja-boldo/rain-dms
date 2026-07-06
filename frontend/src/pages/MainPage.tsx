@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { getMainPage, getTags, deleteDocument } from "../api/client";
 import type { Document, TagEntry } from "../api/client";
 import DocumentCard from "../components/DocumentCard";
@@ -7,6 +15,11 @@ import { useSettingsStore } from "../store/settings";
 import { useUploadStore } from "../store/uploads";
 import { reportSuccess } from "../store/toast";
 import { useI18n } from "../i18n";
+
+const CARD_MIN = 188;
+const GAP = 13;
+const ROW_HEIGHT = 215;
+const ROW_OVERSCAN = 4;
 
 type ViewMode = "grid" | "tree";
 type SortKey = "date_desc" | "date_asc" | "name_asc" | "pages_desc";
@@ -108,7 +121,9 @@ export default function MainPage() {
       });
       setTotal(res.totalCount);
       setNextPageIdx((i) => i + 1);
-      setHasMore((nextPageIdx + 1) * PAGE_SIZE < res.totalCount && res.data.length > 0);
+      setHasMore(
+        (nextPageIdx + 1) * PAGE_SIZE < res.totalCount && res.data.length > 0,
+      );
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -152,6 +167,24 @@ export default function MainPage() {
     return () => obs.disconnect();
   }, [view, loadMore]);
 
+  // ── Virtualization ─────────────────────────────────────────────────────
+  // Track the scroll container's width so we can derive the column count
+  // and re-flow the grid responsively (same minmax(188, 1fr) sizing as the
+  // original CSS grid, just measured in JS).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 0;
+      setContainerWidth(w);
+    });
+    ro.observe(el);
+    setContainerWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+
   const filtered = sortDocs(docs, sort).filter((d) => {
     if (!fileFilter) return true;
     const f = fileFilter.toLowerCase();
@@ -160,6 +193,27 @@ export default function MainPage() {
       d.fileS3Key.toLowerCase().includes(f)
     );
   });
+
+  const columns = useMemo(() => {
+    if (containerWidth <= 0) return 1;
+    const inner = containerWidth - 28; // 14px padding each side
+    // Floor so we never promise a column that doesn't fully fit
+    return Math.max(1, Math.floor((inner + GAP) / (CARD_MIN + GAP)));
+  }, [containerWidth]);
+
+  const rowCount = useMemo(
+    () => Math.ceil(filtered.length / columns),
+    [filtered.length, columns],
+  );
+
+  const virtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: ROW_OVERSCAN,
+  });
+
+  const virtualRows = virtualizer.getVirtualItems();
 
   function toggleSelect(key: string) {
     setSelected((s) => {
@@ -200,10 +254,11 @@ export default function MainPage() {
   }
 
   return (
-    <div style={{ display: "flex", height: "100%" }}>
+    <div className="split-panel" style={{ height: "100%" }}>
       {/* Tag sidebar */}
       {tags.length > 0 && (
         <aside
+          className="split-secondary"
           style={{
             width: 176,
             flexShrink: 0,
@@ -212,6 +267,7 @@ export default function MainPage() {
             flexDirection: "column",
             overflow: "hidden",
             background: "var(--bg-surface)",
+            maxHeight: "34vh",
           }}
         >
           <div
@@ -247,8 +303,8 @@ export default function MainPage() {
 
       {/* Main */}
       <div
+        className="split-primary"
         style={{
-          flex: 1,
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
@@ -463,6 +519,7 @@ export default function MainPage() {
 
         {/* Content */}
         <div
+          ref={view === "tree" ? null : scrollRef}
           style={{
             flex: 1,
             overflowY: "auto",
@@ -498,63 +555,98 @@ export default function MainPage() {
             </div>
           )}
           {view === "grid" ? (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(188px,1fr))",
-                gap: 13,
-              }}
-            >
-              {loading
-                ? Array.from({ length: 12 }).map((_, i) => (
+            loading ? (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: `repeat(${Math.max(1, columns)}, 1fr)`,
+                  gap: GAP,
+                }}
+              >
+                {Array.from({
+                  length: Math.max(1, columns) * 2,
+                }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="card"
+                    style={{
+                      height: ROW_HEIGHT - 30,
+                      animation: "pulse 1.5s ease-in-out infinite",
+                    }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div
+                style={{
+                  height: virtualizer.getTotalSize(),
+                  position: "relative",
+                  width: "100%",
+                }}
+              >
+                {virtualRows.map((vr) => {
+                  const start = vr.index * columns;
+                  const rowDocs = filtered.slice(start, start + columns);
+                  return (
                     <div
-                      key={i}
-                      className="card"
+                      key={vr.key}
+                      data-index={vr.index}
                       style={{
-                        height: 185,
-                        animation: "pulse 1.5s ease-in-out infinite",
+                        position: "absolute",
+                        top: vr.start,
+                        left: 0,
+                        right: 0,
+                        height: vr.size,
+                        display: "grid",
+                        gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                        gap: GAP,
                       }}
-                    />
-                  ))
-                : filtered.map((d) => (
-                    <div
-                      key={d.fileS3Key}
-                      style={{ position: "relative" }}
-                      onClick={
-                        bulkMode ? () => toggleSelect(d.fileS3Key) : undefined
-                      }
                     >
-                      {bulkMode && (
+                      {rowDocs.map((d) => (
                         <div
-                          style={{
-                            position: "absolute",
-                            top: 8,
-                            left: 8,
-                            zIndex: 10,
-                            width: 18,
-                            height: 18,
-                            borderRadius: 4,
-                            background: selected.has(d.fileS3Key)
-                              ? "var(--accent)"
-                              : "rgba(0,0,0,0.5)",
-                            border: `2px solid ${selected.has(d.fileS3Key) ? "var(--accent)" : "rgba(255,255,255,0.5)"}`,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            color: "#fff",
-                            fontSize: "0.65rem",
-                            fontWeight: 700,
-                            cursor: "pointer",
-                            transition: "background 0.1s",
-                          }}
+                          key={d.fileS3Key}
+                          style={{ position: "relative", minWidth: 0 }}
+                          onClick={
+                            bulkMode
+                              ? () => toggleSelect(d.fileS3Key)
+                              : undefined
+                          }
                         >
-                          {selected.has(d.fileS3Key) ? "✓" : ""}
+                          {bulkMode && (
+                            <div
+                              style={{
+                                position: "absolute",
+                                top: 8,
+                                left: 8,
+                                zIndex: 10,
+                                width: 18,
+                                height: 18,
+                                borderRadius: 4,
+                                background: selected.has(d.fileS3Key)
+                                  ? "var(--accent)"
+                                  : "rgba(0,0,0,0.5)",
+                                border: `2px solid ${selected.has(d.fileS3Key) ? "var(--accent)" : "rgba(255,255,255,0.5)"}`,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                color: "#fff",
+                                fontSize: "0.65rem",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                transition: "background 0.1s",
+                              }}
+                            >
+                              {selected.has(d.fileS3Key) ? "✓" : ""}
+                            </div>
+                          )}
+                          <DocumentCard doc={d} />
                         </div>
-                      )}
-                      <DocumentCard doc={d} />
+                      ))}
                     </div>
-                  ))}
-            </div>
+                  );
+                })}
+              </div>
+            )
           ) : (
             <FileTree
               documents={filtered}
@@ -568,8 +660,8 @@ export default function MainPage() {
           )}
 
           {/* Infinite-scroll sentinel — fetches the next chunk when it enters view */}
-          {view !== "tree" && hasMore && (
-            <div ref={sentinelRef} style={{ height: 1 }} />
+          {view !== "tree" && hasMore && !loading && (
+            <div ref={sentinelRef} style={{ height: 1, marginTop: 4 }} />
           )}
         </div>
 

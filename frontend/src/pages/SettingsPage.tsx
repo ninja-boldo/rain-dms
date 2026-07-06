@@ -47,6 +47,7 @@ function Row({
 }) {
   return (
     <div
+      className="settings-row"
       style={{
         display: "flex",
         alignItems: "center",
@@ -147,7 +148,9 @@ export default function SettingsPage() {
   const customAccent = useSettingsStore((s) => s.customAccent);
   const setCustomAccent = useSettingsStore((s) => s.setCustomAccent);
   const urlSubstitutions = useSettingsStore((s) => s.urlSubstitutions);
-  const removeUrlSubstitution = useSettingsStore((s) => s.removeUrlSubstitution);
+  const removeUrlSubstitution = useSettingsStore(
+    (s) => s.removeUrlSubstitution,
+  );
   const simulatedTagPaths = useSettingsStore((s) => s.simulatedTagPaths);
   const setSimulatedTagPaths = useSettingsStore((s) => s.setSimulatedTagPaths);
   const lang = useSettingsStore((s) => s.lang);
@@ -197,7 +200,7 @@ export default function SettingsPage() {
       }}
     >
       <h2 style={{ margin: "0 0 20px", fontSize: "0.95rem", fontWeight: 700 }}>
-        Settings
+        {t.st_settings}
       </h2>
 
       {/* Appearance */}
@@ -301,8 +304,17 @@ export default function SettingsPage() {
           >
             {t.st_accent}
           </p>
-          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
-            {(Object.keys(ACCENT_PRESETS) as (keyof typeof ACCENT_PRESETS)[]).map((key) => {
+          <div
+            style={{
+              display: "flex",
+              gap: 7,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
+            {(
+              Object.keys(ACCENT_PRESETS) as (keyof typeof ACCENT_PRESETS)[]
+            ).map((key) => {
               const p = ACCENT_PRESETS[key];
               const active = accent === key;
               return (
@@ -355,7 +367,10 @@ export default function SettingsPage() {
                 padding: "5px 11px",
                 border: `2px solid ${accent === "custom" ? (customAccent ?? "var(--accent)") : "transparent"}`,
                 borderRadius: 7,
-                background: accent === "custom" ? "var(--accent-glow)" : "var(--bg-raised)",
+                background:
+                  accent === "custom"
+                    ? "var(--accent-glow)"
+                    : "var(--bg-raised)",
                 cursor: "pointer",
                 transition: "all 0.15s",
               }}
@@ -366,7 +381,9 @@ export default function SettingsPage() {
                   height: 10,
                   borderRadius: "50%",
                   background:
-                    accent === "custom" && customAccent ? customAccent : "conic-gradient(from 0deg, #f59e0b, #fb7185, #a78bfa, #38bdf8, #84cc16, #f59e0b)",
+                    accent === "custom" && customAccent
+                      ? customAccent
+                      : "conic-gradient(from 0deg, #f59e0b, #fb7185, #a78bfa, #38bdf8, #84cc16, #f59e0b)",
                   flexShrink: 0,
                   position: "relative",
                   overflow: "hidden",
@@ -390,7 +407,8 @@ export default function SettingsPage() {
                 style={{
                   fontSize: "0.75rem",
                   fontWeight: 500,
-                  color: accent === "custom" ? "var(--accent)" : "var(--text-2)",
+                  color:
+                    accent === "custom" ? "var(--accent)" : "var(--text-2)",
                 }}
               >
                 {t.st_accentCustom}
@@ -423,7 +441,9 @@ export default function SettingsPage() {
             {t.st_urlSubsHint}
           </p>
           {urlSubstitutions.length === 0 ? (
-            <p style={{ margin: 0, fontSize: "0.76rem", color: "var(--text-3)" }}>
+            <p
+              style={{ margin: 0, fontSize: "0.76rem", color: "var(--text-3)" }}
+            >
               {t.st_urlSubsEmpty}
             </p>
           ) : (
@@ -443,11 +463,21 @@ export default function SettingsPage() {
                     fontFamily: "JetBrains Mono, monospace",
                   }}
                 >
-                  <span style={{ color: "var(--text-2)", wordBreak: "break-all" }}>
+                  <span
+                    style={{ color: "var(--text-2)", wordBreak: "break-all" }}
+                  >
                     {sub.from}
                   </span>
-                  <span style={{ color: "var(--text-3)", flexShrink: 0 }}>→</span>
-                  <span style={{ color: "var(--accent)", wordBreak: "break-all", flex: 1 }}>
+                  <span style={{ color: "var(--text-3)", flexShrink: 0 }}>
+                    →
+                  </span>
+                  <span
+                    style={{
+                      color: "var(--accent)",
+                      wordBreak: "break-all",
+                      flex: 1,
+                    }}
+                  >
                     {sub.to}
                   </span>
                   <button
@@ -605,11 +635,8 @@ export default function SettingsPage() {
       </Section>
 
       {/* Encryption */}
-      <Section title="Encryption">
-        <Row
-          label="Client-side decryption"
-          sub="Decrypt files and banner images in-browser using your password-derived key"
-        >
+      <Section title={t.st_encryption}>
+        <Row label={t.st_clientDecrypt} sub={t.st_clientDecryptSub}>
           <Toggle value={encEnabled} onChange={setEncEnabled} />
         </Row>
         <div style={{ padding: "10px 14px" }}>
@@ -621,7 +648,7 @@ export default function SettingsPage() {
               fontWeight: 500,
             }}
           >
-            Main encryption key
+            {t.st_encStatus}
           </p>
           <div
             className="mono"
@@ -635,16 +662,14 @@ export default function SettingsPage() {
               wordBreak: "break-all",
             }}
           >
-            {mainKey
-              ? `${mainKey.slice(0, 16)}… (${mainKey.length} chars) — unlocked ✓`
-              : "Not available — sign in again to derive from password"}
+            {mainKey ? t.st_encUnlocked : t.st_encLocked}
           </div>
         </div>
       </Section>
 
       {/* Account */}
-      <Section title="Account">
-        <Row label="Signed in as" sub="JWT stored in localStorage" last>
+      <Section title={t.st_account}>
+        <Row label={t.st_signedInAs} last>
           <span
             className="mono"
             style={{ fontSize: "0.8rem", color: "var(--accent)" }}
@@ -655,28 +680,13 @@ export default function SettingsPage() {
       </Section>
 
       {/* About */}
-      <Section title="About">
-        <Row label="rain·dms" sub="Self-hosted document management system">
+      <Section title={t.st_about}>
+        <Row label="rain·dms" sub={t.st_aboutSub}>
           <span style={{ fontSize: "0.72rem", color: "var(--text-3)" }}>
             v1.0.0
           </span>
         </Row>
-        <Row
-          label="Stack"
-          sub="Bun · Hono · SeaweedFS · RabbitMQ · PaddleOCR · Meilisearch"
-        >
-          <span
-            className="mono"
-            style={{ fontSize: "0.67rem", color: "var(--text-3)" }}
-          >
-            self-hosted
-          </span>
-        </Row>
-        <Row
-          label="OCR format"
-          sub="upLeftPoint / downRightPoint bounding boxes · PP-OCRv5"
-          last
-        >
+        <Row label={t.st_source} last>
           <a
             href="https://github.com/ninja-boldo"
             target="_blank"

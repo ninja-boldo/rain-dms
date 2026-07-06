@@ -35,14 +35,26 @@ export class FileMerger {
     level: "INFO" | "WARN" | "ERROR",
     message: string,
     meta?: Record<string, unknown>,
+    cropToFirst: number | null = null,
   ) {
+    let metaStringCropped: string | undefined;
+
+    if (cropToFirst !== null) {
+      const metaString = meta ? JSON.stringify(meta) : undefined;
+      const cropTo = cropToFirst ?? 250;
+      metaStringCropped = metaString
+        ? metaString.slice(0, cropTo) +
+          (metaString.length > cropTo ? "..." : "")
+        : undefined;
+    }
+
     console.log(
       JSON.stringify({
         timestamp: new Date().toISOString(),
         service: "FileMerger",
         level,
         message,
-        ...meta,
+        meta: cropToFirst === null ? meta : metaStringCropped,
       }),
     );
   }

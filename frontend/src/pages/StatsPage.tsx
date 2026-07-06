@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getDashboard } from "../api/client";
-import { useAllReminders, markReminderDone, type GlobalReminder } from "../store/localData";
+import {
+  useAllReminders,
+  markReminderDone,
+  type GlobalReminder,
+} from "../store/localData";
 import { useI18n } from "../i18n";
 
 function fmt(bytes: number): string {
@@ -225,7 +229,8 @@ function WorkerCard({ worker, type }: { worker: any; type: "ocr" | "merge" }) {
           {worker.peerHost ?? worker.ip ?? worker.id}
         </p>
         <p style={{ margin: 0, fontSize: "0.65rem", color: "var(--text-3)" }}>
-          {type === "ocr" ? t.st_ocr : t.st_merge} · {t.st_pf(worker.prefetch ?? "—")}
+          {type === "ocr" ? t.st_ocr : t.st_merge} ·{" "}
+          {t.st_pf(worker.prefetch ?? "—")}
           {worker.unacked > 0 && (
             <span style={{ color: "var(--warn)", marginLeft: 6 }}>
               {t.st_unacked(worker.unacked)}
@@ -341,7 +346,9 @@ function ReminderRow({
 }) {
   const t = useI18n();
   const name = reminder.filepath.split("/").pop() ?? reminder.filepath;
-  const isOverdue = reminder.at ? new Date(reminder.at).getTime() < Date.now() : false;
+  const isOverdue = reminder.at
+    ? new Date(reminder.at).getTime() < Date.now()
+    : false;
 
   return (
     <div
@@ -369,7 +376,13 @@ function ReminderRow({
         >
           {name}
         </p>
-        <p style={{ margin: "2px 0 0", fontSize: "0.68rem", color: isOverdue ? "var(--danger)" : "var(--text-3)" }}>
+        <p
+          style={{
+            margin: "2px 0 0",
+            fontSize: "0.68rem",
+            color: isOverdue ? "var(--danger)" : "var(--text-3)",
+          }}
+        >
           {reminder.at
             ? new Date(reminder.at).toLocaleString()
             : t.st_reminderNoDate}
@@ -453,6 +466,9 @@ export default function StatsPage() {
   const ocrWorkers: any[] = workers.ocr ?? [];
   const mergeWorkers: any[] = workers.merge ?? [];
   const sparkline: number[] = s.sparkline ?? [];
+  const sparklineDaily: number[] = s.sparkline_daily_30d ?? [];
+  const topTags: { tag: string; doc_count: number }[] = s.top_tags ?? [];
+  const ingestDuration = s.ingest_duration ?? null;
   const byExt: Record<string, number> = s.by_extension ?? {};
   const biggestFiles: any[] = s.biggest_files ?? [];
   const downloads = data?.downloads ?? {};
@@ -542,16 +558,28 @@ export default function StatsPage() {
         </div>
       )}
 
-      {/* Pending reminders — aggregated across every file's local reminder */}
-      {pendingReminders.length > 0 && (
-        <Section label={t.st_reminders} defaultOpen={true}>
+      {/* Pending reminders — aggregated across every file's local reminder.
+          Always visible (even empty) so it's actually discoverable. */}
+      <Section
+        label={
+          pendingReminders.length > 0
+            ? `${t.st_reminders} (${pendingReminders.length})`
+            : t.st_reminders
+        }
+        defaultOpen={true}
+      >
+        {pendingReminders.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {pendingReminders.map((r) => (
               <ReminderRow key={r.filepath} reminder={r} onOpen={nav} />
             ))}
           </div>
-        </Section>
-      )}
+        ) : (
+          <p style={{ margin: 0, fontSize: "0.76rem", color: "var(--text-3)" }}>
+            {t.st_remindersEmpty}
+          </p>
+        )}
+      </Section>
 
       {/* Documents */}
       <Section label={t.st_documents}>
@@ -568,12 +596,18 @@ export default function StatsPage() {
             value={<AnimNum value={s.total_documents ?? 0} />}
             accent
           />
-          <Stat label={t.st_1h} value={<AnimNum value={s.added_last_1h ?? 0} />} />
+          <Stat
+            label={t.st_1h}
+            value={<AnimNum value={s.added_last_1h ?? 0} />}
+          />
           <Stat
             label={t.st_24h}
             value={<AnimNum value={s.added_last_24h ?? 0} />}
           />
-          <Stat label={t.st_7d} value={<AnimNum value={s.added_last_7d ?? 0} />} />
+          <Stat
+            label={t.st_7d}
+            value={<AnimNum value={s.added_last_7d ?? 0} />}
+          />
           <Stat
             label={t.st_30d}
             value={<AnimNum value={s.added_last_30d ?? 0} />}
@@ -600,7 +634,7 @@ export default function StatsPage() {
           />
         </div>
 
-        {/* Sparkline */}
+        {/* Sparkline (hourly, 24h) */}
         {sparkline.length > 0 && (
           <div className="card" style={{ padding: "12px 14px" }}>
             <p
@@ -616,6 +650,82 @@ export default function StatsPage() {
               {t.st_sparkline}
             </p>
             <Sparkline data={sparkline} />
+          </div>
+        )}
+
+        {/* Daily trend, 30 days */}
+        {sparklineDaily.length > 0 && (
+          <div className="card" style={{ padding: "12px 14px", marginTop: 10 }}>
+            <p
+              style={{
+                margin: "0 0 8px",
+                fontSize: "0.63rem",
+                color: "var(--text-3)",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.07em",
+              }}
+            >
+              {t.st_sparklineDaily}
+            </p>
+            <Sparkline data={sparklineDaily} />
+          </div>
+        )}
+
+        {/* Ingest performance — how long the pipeline actually takes end to end */}
+        {ingestDuration && ingestDuration.sample_size > 0 && (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(140px,1fr))",
+              gap: 10,
+              marginTop: 10,
+            }}
+          >
+            <Stat
+              label={t.st_ingestAvg}
+              value={fmtEta(Math.round(ingestDuration.avg_seconds ?? 0))}
+              mono
+            />
+            <Stat
+              label={t.st_ingestMedian}
+              value={fmtEta(Math.round(ingestDuration.median_seconds ?? 0))}
+              mono
+            />
+            <Stat
+              label={t.st_ingestRange}
+              value={`${fmtEta(Math.round(ingestDuration.min_seconds ?? 0))}–${fmtEta(Math.round(ingestDuration.max_seconds ?? 0))}`}
+              mono
+            />
+            <Stat
+              label={t.st_ingestSample}
+              value={<AnimNum value={ingestDuration.sample_size} />}
+            />
+          </div>
+        )}
+
+        {/* Top tags */}
+        {topTags.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <p
+              style={{
+                margin: "0 0 6px",
+                fontSize: "0.63rem",
+                color: "var(--text-3)",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.07em",
+              }}
+            >
+              {t.st_topTags}
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {topTags.map((tg) => (
+                <span key={tg.tag} className="tag">
+                  {tg.tag} · {tg.doc_count}
+                </span>
+              ))}
+            </div>
           </div>
         )}
       </Section>
@@ -781,9 +891,7 @@ export default function StatsPage() {
 
       {/* Workers */}
       {(ocrWorkers.length > 0 || mergeWorkers.length > 0) && (
-        <Section
-          label={t.st_workers(ocrWorkers.length, mergeWorkers.length)}
-        >
+        <Section label={t.st_workers(ocrWorkers.length, mergeWorkers.length)}>
           <div
             style={{
               display: "grid",
@@ -817,7 +925,11 @@ export default function StatsPage() {
               value={<AnimNum value={downloads.total ?? 0} />}
               accent
             />
-            <Stat label={t.st_downloadsBytes} value={fmt(downloads.total_bytes ?? 0)} mono />
+            <Stat
+              label={t.st_downloadsBytes}
+              value={fmt(downloads.total_bytes ?? 0)}
+              mono
+            />
             <Stat
               label={t.st_downloadsRate}
               value={`${fmtRate(downloads.summary?.agent_downloads_per_minute_30s)} · ${fmtRate(downloads.summary?.agent_downloads_per_minute_60s)}`}
@@ -836,7 +948,11 @@ export default function StatsPage() {
             }}
           >
             {downloadWorkers.map((w: any) => (
-              <div key={w.id} className="card-sm" style={{ padding: "9px 11px" }}>
+              <div
+                key={w.id}
+                className="card-sm"
+                style={{ padding: "9px 11px" }}
+              >
                 <p
                   style={{
                     margin: "0 0 4px",
@@ -852,7 +968,13 @@ export default function StatsPage() {
                 >
                   {w.ip ?? w.tag}
                 </p>
-                <p style={{ margin: 0, fontSize: "0.66rem", color: "var(--text-3)" }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: "0.66rem",
+                    color: "var(--text-3)",
+                  }}
+                >
                   {w.downloads} dl · {fmt(w.bytes ?? 0)}
                 </p>
                 {Array.isArray(w.recent_files) && w.recent_files.length > 0 ? (
@@ -868,10 +990,17 @@ export default function StatsPage() {
                     }}
                     title={w.recent_files.join(", ")}
                   >
-                    {t.st_downloadsRecent}: {w.recent_files.slice(0, 2).join(", ")}
+                    {t.st_downloadsRecent}:{" "}
+                    {w.recent_files.slice(0, 2).join(", ")}
                   </p>
                 ) : (
-                  <p style={{ margin: "4px 0 0", fontSize: "0.6rem", color: "var(--text-3)" }}>
+                  <p
+                    style={{
+                      margin: "4px 0 0",
+                      fontSize: "0.6rem",
+                      color: "var(--text-3)",
+                    }}
+                  >
                     {t.st_downloadsNoRecent}
                   </p>
                 )}

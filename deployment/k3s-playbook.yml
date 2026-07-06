@@ -22,8 +22,8 @@
 
     - name: add custom root ca
       ansible.builtin.copy:
-        src: '../docker/certs/rootCA.pem'
-        dest: '/usr/local/share/ca-certificates/rootCA.pem'
+        src: "../docker/certs/rootCA.pem"
+        dest: "/usr/local/share/ca-certificates/rootCA.pem"
 
     - name: trust rain dms root ca-volume
       ansible.builtin.command: update-ca-certificates
@@ -62,9 +62,15 @@
       environment:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
+    - name: Wait for Installation CRD to be established
+      ansible.builtin.shell: |
+        kubectl wait --for=condition=Established crd/installations.operator.tigera.io --timeout=60s
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
     - name: Install Calico
       ansible.builtin.shell: |
-        cat <<EOF | kubectl apply --validate=false -f -
+        cat <<EOF | kubectl apply --server-side --force-conflicts --validate=false -f -
         apiVersion: operator.tigera.io/v1
         kind: Installation
         metadata:
@@ -160,7 +166,6 @@
                   readOnly: true
       environment:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
-
 
     - name: Wait for node token
       ansible.builtin.wait_for:

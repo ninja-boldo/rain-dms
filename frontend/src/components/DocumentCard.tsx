@@ -52,6 +52,7 @@ export default function DocumentCard({ doc }: Props) {
       onClick={() =>
         nav(`/document?filepath=${encodeURIComponent(doc.fileS3Key)}`)
       }
+      style={{ minWidth: 0, overflow: "hidden" }}
     >
       {/* Banner */}
       <div
@@ -211,7 +212,9 @@ export default function DocumentCard({ doc }: Props) {
       </div>
 
       {/* Meta */}
-      <div style={{ padding: "9px 11px 11px" }}>
+      <div
+        style={{ padding: "9px 11px 11px", minWidth: 0, overflow: "hidden" }}
+      >
         <p
           style={{
             margin: 0,
@@ -252,10 +255,29 @@ export default function DocumentCard({ doc }: Props) {
 
         {doc.assigned_tags?.length > 0 && (
           <div
-            style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 7 }}
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 3,
+              marginTop: 7,
+              minWidth: 0,
+              maxWidth: "100%",
+              overflow: "hidden",
+            }}
           >
             {doc.assigned_tags.slice(0, 3).map((t) => (
-              <span key={t} className="tag" style={{ pointerEvents: "none" }}>
+              <span
+                key={t}
+                className="tag"
+                style={{
+                  pointerEvents: "none",
+                  maxWidth: "100%",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  minWidth: 0,
+                }}
+                title={t}
+              >
                 {t}
               </span>
             ))}

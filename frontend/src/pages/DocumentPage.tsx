@@ -246,7 +246,11 @@ export default function DocumentPage() {
     const el = scrollRef.current;
     if (!el) return;
     const update = () => {
-      const w = Math.max(360, Math.min(el.clientWidth - 48, 1100));
+      const cw = el.clientWidth;
+      const narrow = cw < 480;
+      const margin = narrow ? 12 : 48;
+      const floor = narrow ? 200 : 360;
+      const w = Math.max(floor, Math.min(cw - margin, 1100));
       setPageWidth(w);
       setViewportH(el.clientHeight);
     };
@@ -354,7 +358,9 @@ export default function DocumentPage() {
   if (loading)
     return (
       <Centered>
-        <p style={{ color: "var(--text-3)", fontSize: "0.85rem" }}>{t.doc_loading}</p>
+        <p style={{ color: "var(--text-3)", fontSize: "0.85rem" }}>
+          {t.doc_loading}
+        </p>
       </Centered>
     );
   if (error || !doc)
@@ -473,11 +479,15 @@ export default function DocumentPage() {
                 {doc.fileS3Key} ⧉
               </button>
               <span style={{ fontFamily: "JetBrains Mono, monospace" }}>
-                {t.doc_ingested}: {doc.created_at ? new Date(doc.created_at).toLocaleString() : "—"}
+                {t.doc_ingested}:{" "}
+                {doc.created_at
+                  ? new Date(doc.created_at).toLocaleString()
+                  : "—"}
                 {(doc as any).spawned_time && (
                   <>
                     {" · "}
-                    {t.doc_pipeline}: {new Date((doc as any).spawned_time).toLocaleString()}
+                    {t.doc_pipeline}:{" "}
+                    {new Date((doc as any).spawned_time).toLocaleString()}
                   </>
                 )}
               </span>
@@ -987,18 +997,28 @@ function OcrOverlay({
     };
   }
 
-  function onMouseDown(e: React.MouseEvent<HTMLDivElement>) {
-    if (markersMode !== "draw") return;
-    if (e.button !== 0) return;
-    if ((e.target as HTMLElement).closest("[data-box-key]")) return; // don't draw when clicking a marker
-    const { x, y } = layerToImage(e.clientX, e.clientY);
-    setDrawing({ startX: x, startY: y, x, y });
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    const onBox = (e.target as HTMLElement).closest("[data-box-key]");
+    if (markersMode === "draw") {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      if (onBox) return; // don't draw when tapping a marker
+      const { x, y } = layerToImage(e.clientX, e.clientY);
+      setDrawing({ startX: x, startY: y, x, y });
+      return;
+    }
+    // Touch/pen tap on empty space (not a box): dismiss any pinned tooltip.
+    if (e.pointerType !== "mouse" && !onBox) {
+      setHoveredIdx(null);
+      setMouse(null);
+    }
   }
 
-  function onMouseMove(e: React.MouseEvent<HTMLDivElement>) {
-    const rect = layerRef.current?.getBoundingClientRect();
-    if (rect) {
-      setMouse({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === "mouse") {
+      const rect = layerRef.current?.getBoundingClientRect();
+      if (rect) {
+        setMouse({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+      }
     }
     if (drawing) {
       const { x, y } = layerToImage(e.clientX, e.clientY);
@@ -1006,7 +1026,7 @@ function OcrOverlay({
     }
   }
 
-  function onMouseUp() {
+  function onPointerUp() {
     if (!drawing) return;
     const x1 = Math.min(drawing.startX, drawing.x);
     const y1 = Math.min(drawing.startY, drawing.y);
@@ -1020,10 +1040,19 @@ function OcrOverlay({
     }
   }
 
-  function onMouseLeave() {
-    setHoveredIdx(null);
-    setMouse(null);
+  function onPointerLeave(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === "mouse") {
+      setHoveredIdx(null);
+      setMouse(null);
+    }
     if (drawing) setDrawing(null);
+  }
+
+  function updateMouseFromEvent(e: React.PointerEvent) {
+    const layerRect = layerRef.current?.getBoundingClientRect();
+    if (layerRect) {
+      setMouse({ x: e.clientX - layerRect.left, y: e.clientY - layerRect.top });
+    }
   }
 
   const drawnRects = markers.filter((m) => m.kind === "drawn");
@@ -1031,13 +1060,14 @@ function OcrOverlay({
   return (
     <div
       ref={layerRef}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      onMouseLeave={onMouseLeave}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerLeave={onPointerLeave}
       style={{
         position: "absolute",
         inset: 0,
+        touchAction: markersMode === "draw" ? "none" : undefined,
         pointerEvents: "none",
         cursor: markersMode === "draw" ? "crosshair" : "default",
       }}
@@ -1077,25 +1107,20 @@ function OcrOverlay({
           <div
             key={i}
             data-box-key={`ocr_${i}`}
-            onMouseEnter={(e) => {
+            onPointerEnter={(e) => {
+              if (e.pointerType !== "mouse") return;
               setHoveredIdx(i);
-              const layerRect = layerRef.current?.getBoundingClientRect();
-              if (layerRect) {
-                setMouse({
-                  x: e.clientX - layerRect.left,
-                  y: e.clientY - layerRect.top,
-                });
-              }
+              updateMouseFromEvent(e);
             }}
-            onMouseMove={(e) => {
-              if (hoveredIdx !== i) return;
-              const layerRect = layerRef.current?.getBoundingClientRect();
-              if (layerRect) {
-                setMouse({
-                  x: e.clientX - layerRect.left,
-                  y: e.clientY - layerRect.top,
-                });
-              }
+            onPointerMove={(e) => {
+              if (e.pointerType !== "mouse" || hoveredIdx !== i) return;
+              updateMouseFromEvent(e);
+            }}
+            onPointerDown={(e) => {
+              if (e.pointerType === "mouse") return;
+              e.stopPropagation();
+              setHoveredIdx((prev) => (prev === i ? null : i));
+              updateMouseFromEvent(e);
             }}
             onContextMenu={(e) => {
               e.preventDefault();
@@ -1185,7 +1210,7 @@ function OcrOverlay({
         />
       )}
 
-      {/* Hover tooltip */}
+      {/* Hover / tap tooltip */}
       {hovered && mouse && (
         <div
           style={{
@@ -1203,11 +1228,12 @@ function OcrOverlay({
             borderRadius: 6,
             padding: "8px 10px",
             color: "var(--ocr-tooltip-fg)",
-            pointerEvents: "none",
+            pointerEvents: "auto",
             zIndex: 8,
             boxShadow: "0 8px 24px rgba(0,0,0,0.85)",
             maxWidth: 260,
           }}
+          onPointerDown={(e) => e.stopPropagation()}
         >
           <div
             style={{
@@ -1254,16 +1280,23 @@ function OcrOverlay({
                 conf {(hovered.confidence * 100).toFixed(0)}%
               </span>
             )}
-            <span
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (hoveredIdx != null) onToggleBoxMarker(hoveredIdx, hovered);
+              }}
               style={{
-                fontSize: "0.62rem",
-                color: "var(--text-3)",
+                background: "none",
+                border: "1px solid var(--ocr-tooltip-border)",
+                borderRadius: 999,
+                padding: "2px 8px",
+                fontSize: "0.66rem",
+                color: "var(--ocr-tooltip-fg)",
+                cursor: "pointer",
               }}
             >
-              {ocrMarkerByBoxIdx.has(hoveredIdx ?? -1)
-                ? "marked · double-click to unmark"
-                : "double-click to mark"}
-            </span>
+              {ocrMarkerByBoxIdx.has(hoveredIdx ?? -1) ? "★ Unmark" : "☆ Mark"}
+            </button>
           </div>
         </div>
       )}
@@ -1320,6 +1353,7 @@ function NoteEditor({
         padding: 8,
         zIndex: 9,
         width: 220,
+        maxWidth: "calc(100vw - 40px)",
         boxShadow: "0 8px 24px rgba(0,0,0,0.7)",
         pointerEvents: "auto",
       }}

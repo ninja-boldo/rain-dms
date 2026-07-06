@@ -328,6 +328,17 @@
   }
 }
 
+/* Skeleton shimmer for image placeholders. Animates the background-position
+   rather than opacity so it's cheap to run on many cards simultaneously. */
+@keyframes authimg-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
 /* OCR hit blink — pulses the active match box so the eye locks on it */
 @keyframes ocr-blink {
   0% {
@@ -448,6 +459,7 @@
 @media (max-width: 800px) {
   .app-shell {
     position: relative;
+    flex-direction: column;
   }
   .app-sidebar {
     position: fixed;
@@ -521,5 +533,16 @@
     bottom: 10px !important;
     width: auto !important;
     max-width: none !important;
+  }
+
+  /* Settings rows: label+control side-by-side is too cramped on a phone —
+     stack them and let the control take the full row width instead. */
+  .settings-row {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+  .settings-row > *:last-child {
+    width: 100%;
   }
 }

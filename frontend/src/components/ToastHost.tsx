@@ -26,7 +26,16 @@ const KIND_STYLE: Record<
 function KindIcon({ kind }: { kind: ToastKind }) {
   if (kind === "error") {
     return (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="15"
+        height="15"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <circle cx="12" cy="12" r="10" />
         <line x1="12" y1="8" x2="12" y2="12" />
         <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -35,14 +44,32 @@ function KindIcon({ kind }: { kind: ToastKind }) {
   }
   if (kind === "success") {
     return (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="15"
+        height="15"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
         <polyline points="22 4 12 14.01 9 11.01" />
       </svg>
     );
   }
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="12" cy="12" r="10" />
       <line x1="12" y1="16" x2="12" y2="12" />
       <line x1="12" y1="8" x2="12.01" y2="8" />
@@ -54,6 +81,7 @@ export default function ToastHost() {
   const t = useI18n();
   const toasts = useToastStore((s) => s.toasts);
   const dismiss = useToastStore((s) => s.dismiss);
+  const markRead = useToastStore((s) => s.markRead);
 
   if (toasts.length === 0) return null;
 
@@ -78,6 +106,9 @@ export default function ToastHost() {
           <div
             key={toast.id}
             role="alert"
+            onClick={() => {
+              if (toast.kind === "error") markRead(toast.id);
+            }}
             style={{
               pointerEvents: "auto",
               background: "var(--bg-surface)",
@@ -139,7 +170,11 @@ export default function ToastHost() {
               )}
             </div>
             <button
-              onClick={() => dismiss(toast.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (toast.kind === "error") markRead(toast.id);
+                dismiss(toast.id);
+              }}
               title={t.err_dismiss}
               aria-label={t.err_dismiss}
               style={{

@@ -40,7 +40,14 @@ class RollingCounter {
   ratePerSec(windowMs: number): number | null {
     const now = Date.now();
     const cutoff = now - windowMs;
-    const recent = this.events.filter((t) => t >= cutoff).length;
+    let lo = 0;
+    let hi = this.events.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (this.events[mid] < cutoff) lo = mid + 1;
+      else hi = mid;
+    }
+    const recent = this.events.length - lo;
     if (recent === 0) return null;
     return recent / (windowMs / 1000);
   }
@@ -96,6 +103,11 @@ interface ConsumerRegistration {
 }
 
 export class QueueHandler {
+  // Upper bound on distinct IPs tracked in memory for download stats, so a
+  // long-lived process can't accumulate an unbounded Map under e.g. scraping
+  // or IP-spoofed traffic.
+  private static readonly MAX_TRACKED_IPS = 5000;
+
   private connection: Connection | null = null;
   private channel: ConfirmChannel | null = null;
   private isShuttingDown = false;
@@ -113,6 +125,9 @@ export class QueueHandler {
     agentDownloads: new RollingCounter(),
   };
 
+  // Map iteration order in JS follows insertion order. We delete+re-insert an
+  // entry whenever it's touched, so the map is always ordered oldest → newest,
+  // which lets eviction grab the least-recently-seen IP in O(1).
   private workerDownloads = new Map<string, WorkerDownloadRecord>();
   private inFlightMessages = 0;
   private consumerRegistrations: ConsumerRegistration[] = [];
@@ -134,15 +149,30 @@ export class QueueHandler {
       throw new Error("Channel not initialized. Use QueueHandler.create()");
   }
 
+  private withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+    return Promise.race([
+      p,
+      new Promise<T>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`${label} timed out after ${ms}ms`)),
+          ms,
+        ),
+      ),
+    ]);
+  }
+
   private async connect(): Promise<void> {
     if (!process.env.AMQP_URL) throw new Error("AMQP_URL is missing");
-
     const urlObj = new URL(process.env.AMQP_URL);
     urlObj.searchParams.set("heartbeat", "60");
     const balancedUrl = urlObj.toString();
 
     console.log(`[QueueHandler]: Connecting to broker at ${urlObj.host}...`);
-    this.connection = await amqp.connect(balancedUrl, { timeout: 20000 });
+    this.connection = await this.withTimeout(
+      amqp.connect(balancedUrl, { timeout: 20000 }),
+      20_000,
+      "amqp.connect",
+    );
 
     this.connection.on("error", (err) => {
       console.error("⚠️ [QueueHandler]: Connection error:", err.message);
@@ -162,7 +192,11 @@ export class QueueHandler {
       console.log("[QueueHandler]: Connection unblocked");
     });
 
-    const baseChannel = await this.connection.createConfirmChannel();
+    const baseChannel = await this.withTimeout(
+      this.connection.createConfirmChannel(),
+      2500,
+      "",
+    );
     this.channel = baseChannel;
 
     this.channel.on("error", (err) => {
@@ -190,20 +224,36 @@ export class QueueHandler {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 10 ** 6;
   private reconnectDelay = 5000;
+  private reconnectDelayCapMs = 60_000;
+  // Guards against duplicate reconnect scheduling — amqplib commonly fires
+  // both 'error' and 'close' for the same underlying failure, which previously
+  // could stack two independent reconnect timers/attempts.
+  private reconnecting = false;
 
   private scheduleReconnect(): void {
-    if (this.isShuttingDown) return;
+    if (this.isShuttingDown || this.reconnecting) return;
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error(
         "[QueueHandler]: Max reconnection attempts reached. Giving up.",
       );
       return;
     }
+    this.reconnecting = true;
     this.reconnectAttempts++;
+
+    // Exponential backoff (capped) with jitter, instead of a fixed 5s retry,
+    // so a flapping broker doesn't get hammered with reconnect attempts.
+    const backoff = Math.min(
+      this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1),
+      this.reconnectDelayCapMs,
+    );
+    const delay = Math.round(backoff * (0.85 + Math.random() * 0.3));
+
     console.log(
-      `[QueueHandler]: Scheduling reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${this.reconnectDelay}ms...`,
+      `[QueueHandler]: Scheduling reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms...`,
     );
     setTimeout(async () => {
+      this.reconnecting = false;
       try {
         await this.connect();
         this.reconnectAttempts = 0;
@@ -211,7 +261,7 @@ export class QueueHandler {
         console.error("[QueueHandler]: Reconnection failed:", err);
         this.scheduleReconnect();
       }
-    }, this.reconnectDelay);
+    }, delay);
   }
 
   static async create(
@@ -239,15 +289,32 @@ export class QueueHandler {
     return this.vhost === "/" ? "%2F" : encodeURIComponent(this.vhost);
   }
 
-  private async mgmtGet(path: string) {
-    const res = await fetch(`${this.managementUrl}/api${path}`, {
-      headers: { Authorization: `Basic ${this.managementAuth}` },
-    });
-    if (!res.ok)
-      throw new Error(
-        `Management API ${path} → ${res.status} ${res.statusText}`,
-      );
-    return res.json();
+  private async mgmtGet<T = any>(path: string, timeoutMs = 10_000): Promise<T> {
+    // Bound how long a management API call can hang. Previously an
+    // unresponsive management plugin (or a network partition) could stall
+    // these calls indefinitely.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(`${this.managementUrl}/api${path}`, {
+        headers: { Authorization: `Basic ${this.managementAuth}` },
+        signal: controller.signal,
+      });
+      if (!res.ok)
+        throw new Error(
+          `Management API ${path} → ${res.status} ${res.statusText}`,
+        );
+      return (await res.json()) as T;
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        throw new Error(
+          `Management API ${path} timed out after ${timeoutMs}ms`,
+        );
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private async fetchQueueData(queueName: string) {
@@ -266,7 +333,10 @@ export class QueueHandler {
         peerHost: c.channel_details?.peer_host ?? "?",
         peerPort: c.channel_details?.peer_port ?? 0,
         prefetchCount: c.prefetch_count ?? 0,
-        ackRequired: !c.ack_required === false,
+        // Was previously `!c.ack_required === false`, a convoluted no-op
+        // that just evaluates to Boolean(c.ack_required). Simplified for
+        // clarity; behavior is unchanged.
+        ackRequired: Boolean(c.ack_required),
         channelNumber: c.channel_details?.number ?? 0,
         connectionName: c.channel_details?.connection_name ?? "?",
       }));
@@ -293,24 +363,41 @@ export class QueueHandler {
     return result;
   }
 
-  async peekMessages(queueName: string, count = 5): Promise<PeekedMessage[]> {
+  async peekMessages(
+    queueName: string,
+    count = 5,
+    timeoutMs = 10_000,
+  ): Promise<PeekedMessage[]> {
     const vhost = this.encodedVhost();
-    const res = await fetch(
-      `${this.managementUrl}/api/queues/${vhost}/${encodeURIComponent(queueName)}/get`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Basic ${this.managementAuth}`,
-          "Content-Type": "application/json",
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let res: Response;
+    try {
+      res = await fetch(
+        `${this.managementUrl}/api/queues/${vhost}/${encodeURIComponent(queueName)}/get`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Basic ${this.managementAuth}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            count,
+            ackmode: "ack_requeue_true",
+            encoding: "auto",
+            truncate: 200,
+          }),
+          signal: controller.signal,
         },
-        body: JSON.stringify({
-          count,
-          ackmode: "ack_requeue_true",
-          encoding: "auto",
-          truncate: 200,
-        }),
-      },
-    );
+      );
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        throw new Error(`Peek timed out after ${timeoutMs}ms`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok) throw new Error(`Peek failed: ${res.status}`);
     const msgs = (await res.json()) as any[];
     return msgs.map((m) => ({
@@ -355,6 +442,13 @@ export class QueueHandler {
           (queueData.messages_ready ?? 0) > totalConsumers * 20,
       };
     } catch (e: any) {
+      // Previously swallowed silently, which made real management-API
+      // failures invisible in production. Now logged (once per call) while
+      // keeping the same zeroed fallback shape for callers.
+      console.error(
+        `[QueueHandler]: getQueueStats(${queueName}) failed, returning fallback stats:`,
+        e?.message ?? e,
+      );
       return {
         queue: queueName,
         messages: 0,
@@ -384,7 +478,21 @@ export class QueueHandler {
     this.counters.agentDownloads.record();
     const entry: WorkerDownloadEntry = { filename, bytes, at: Date.now() };
     const existing = this.workerDownloads.get(ip);
-    if (!existing) {
+    if (existing) {
+      existing.totalDownloads++;
+      existing.totalBytes += bytes;
+      existing.lastSeenAt = Date.now();
+      existing.recentFiles.push(entry);
+      if (existing.recentFiles.length > 20) existing.recentFiles.shift();
+      // Move this IP to the "most recently seen" end of the map so eviction
+      // (below) can always pop the true least-recently-seen entry in O(1).
+      this.workerDownloads.delete(ip);
+      this.workerDownloads.set(ip, existing);
+    } else {
+      if (this.workerDownloads.size >= QueueHandler.MAX_TRACKED_IPS) {
+        const oldestKey = this.workerDownloads.keys().next().value;
+        if (oldestKey !== undefined) this.workerDownloads.delete(oldestKey);
+      }
       this.workerDownloads.set(ip, {
         ip,
         totalDownloads: 1,
@@ -393,12 +501,6 @@ export class QueueHandler {
         lastSeenAt: Date.now(),
         recentFiles: [entry],
       });
-    } else {
-      existing.totalDownloads++;
-      existing.totalBytes += bytes;
-      existing.lastSeenAt = Date.now();
-      existing.recentFiles.push(entry);
-      if (existing.recentFiles.length > 20) existing.recentFiles.shift();
     }
   }
 
@@ -514,8 +616,13 @@ export class QueueHandler {
             this.counters.acked.record();
           }
         } catch (err) {
-          this.counters.nacked.record();
           if (!noAck && !manualAck && this.channel && !this.channel.closed) {
+            // Only record a "nacked" event when we actually nack the broker.
+            // Previously this counter was incremented unconditionally, so it
+            // over-counted nacks whenever manualAck was in use (the caller
+            // handles ack/nack itself in that mode and nothing was actually
+            // sent to the broker here).
+            this.counters.nacked.record();
             if (err instanceof PermanentFailureError) {
               console.error(
                 "[Queue] Permanent failure — routing to poison queue:",
@@ -529,6 +636,11 @@ export class QueueHandler {
               );
               this.channel.nack(msg, false, true);
             }
+          } else if (manualAck) {
+            console.error(
+              "[Queue] Handler threw with manualAck enabled — caller is responsible for ack/nack:",
+              err,
+            );
           }
         } finally {
           this.inFlightMessages--;

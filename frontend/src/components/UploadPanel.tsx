@@ -264,7 +264,17 @@ export default function UploadPanel() {
         }}
       >
         <UploadIco />
-        <span style={{ fontWeight: 600, fontSize: "0.85rem", flex: "1 1 auto", minWidth: 60, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span
+          style={{
+            fontWeight: 600,
+            fontSize: "0.85rem",
+            flex: "1 1 auto",
+            minWidth: 60,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
           {t.ul_uploadsTitle}
           {total > 0 && (
             <span
@@ -303,7 +313,9 @@ export default function UploadPanel() {
           >
             <ActivityDot />
             {t.ul_parallel(activeWorkers)}
-            <span style={{ opacity: 0.7 }}>· {t.ul_reqPerSec(requestsPerSecond)}</span>
+            <span style={{ opacity: 0.7 }}>
+              · {t.ul_reqPerSec(requestsPerSecond)}
+            </span>
           </span>
         )}
         {running ? (
@@ -332,11 +344,7 @@ export default function UploadPanel() {
           </button>
         ) : null}
         {total > 0 && (
-          <button
-            onClick={clearFinished}
-            style={btnSm}
-            title={t.ul_clear}
-          >
+          <button onClick={clearFinished} style={btnSm} title={t.ul_clear}>
             {t.ul_clear}
           </button>
         )}
