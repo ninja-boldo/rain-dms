@@ -157,10 +157,15 @@ function uploadWithProgress(
       if (v) xhr.setRequestHeader(k, v);
     }
     xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+      if (e.lengthComputable)
+        onProgress(Math.round((e.loaded / e.total) * 100));
     };
     xhr.onload = () => {
-      resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, text: xhr.responseText });
+      resolve({
+        ok: xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        text: xhr.responseText,
+      });
     };
     xhr.onerror = () => reject(new Error("Network error"));
     xhr.onabort = () => reject(new Error("Aborted"));
@@ -288,7 +293,10 @@ export const useUploadStore = create<UploadState>((set, get) => ({
           set({ lastCompletedAt: Date.now() });
         }
       } catch (e: any) {
-        mutate(job.id, { state: "error", message: e.message ?? "Upload failed" });
+        mutate(job.id, {
+          state: "error",
+          message: e.message ?? "Upload failed",
+        });
       } finally {
         set((s) => ({ activeWorkers: Math.max(0, s.activeWorkers - 1) }));
       }
@@ -326,12 +334,21 @@ export const useUploadStore = create<UploadState>((set, get) => ({
         const done = finalJobs.filter(
           (j) => batchIds.has(j.id) && j.status.state === "done",
         ).length;
-        const elapsedS = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+        const elapsedS = Math.max(
+          1,
+          Math.round((Date.now() - startedAt) / 1000),
+        );
         const t = getI18n();
         if (errored > 0) {
-          reportError(t.toast_error, t.ul_batchErr(done, queue.length, errored, elapsedS));
+          reportError(
+            t.toast_error,
+            t.ul_batchErr(done, queue.length, errored, elapsedS),
+          );
         } else if (done > 0) {
-          reportSuccess(t.toast_success, t.ul_batchOk(done, queue.length, elapsedS));
+          reportSuccess(
+            t.toast_success,
+            t.ul_batchOk(done, queue.length, elapsedS),
+          );
         }
       }
     })();

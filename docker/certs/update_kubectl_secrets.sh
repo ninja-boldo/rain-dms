@@ -11,10 +11,6 @@ KEY_FILE="rain.dms.cert-key.pem"
 ROOT_CA_FILE="./rootCA.pem"
 ENV_FILE="../.env"
 
-RABBITMQ_CERT_NAME="rabbitmq-cert"
-RABBITMQ_CERT_FILE="${RABBITMQ_CERT_NAME}.pem"
-RABBITMQ_KEY_FILE="${RABBITMQ_CERT_NAME}-key.pem"
-
 
 set -a
 source "$ENV_FILE"
@@ -23,7 +19,7 @@ set +a
 kubectl get nodes
 
 echo "Recreating Kubernetes secrets..."
-
+ 
 kubectl create secret tls "$CERT_NAME" \
   --cert="$CERT_FILE" \
   --key="$KEY_FILE" \
@@ -57,10 +53,10 @@ kubectl create secret generic "$APP_SECRET_NAME" \
   --dry-run=client -o yaml | kubectl apply -f -
 
   # --- Create the CA secret for keda
-kubectl create secret generic keda-custom-ca \
+kubectl create secret generic "$SECRET_NAME" \
   --from-file=ca.crt="$ROOT_CA_FILE" \
-  --from-file=tls.crt="$RABBITMQ_CERT_FILE" \
-  --from-file=tls.key="$RABBITMQ_KEY_FILE" \
+  --from-file=tls.crt="$CERT_FILE" \
+  --from-file=tls.key="$KEY_FILE" \
   -n default \
   --dry-run=client -o yaml | kubectl apply -f -
 

@@ -167,7 +167,16 @@ export default function AuthImage({
     return () => {
       cancelled = true;
     };
-  }, [src, inView, encryptedFileKey, mainKey, s3Base, token, username, urlSubstitutions]);
+  }, [
+    src,
+    inView,
+    encryptedFileKey,
+    mainKey,
+    s3Base,
+    token,
+    username,
+    urlSubstitutions,
+  ]);
 
   useEffect(
     () => () => {
@@ -203,10 +212,17 @@ export default function AuthImage({
         className={className}
         style={{
           ...style,
-          minHeight: (style as any)?.minHeight ?? (style as any)?.height ?? "100%",
+          minHeight:
+            (style as any)?.minHeight ?? (style as any)?.height ?? "100%",
           minWidth: (style as any)?.minWidth ?? (style as any)?.width,
           background: "var(--bg-raised)",
-          animation: inView ? "pulse 1.5s ease-in-out infinite" : undefined,
+          animation: inView
+            ? "authimg-shimmer 1.6s linear infinite"
+            : undefined,
+          backgroundImage: inView
+            ? "linear-gradient(90deg, var(--bg-raised) 0%, var(--bg-hover) 50%, var(--bg-raised) 100%)"
+            : undefined,
+          backgroundSize: "200% 100%",
         }}
       />
     );
@@ -220,6 +236,7 @@ export default function AuthImage({
       style={style}
       draggable={false}
       loading="lazy"
+      decoding="async"
       onLoad={(e) => {
         const img = e.currentTarget;
         onLoad?.(img.naturalWidth, img.naturalHeight);

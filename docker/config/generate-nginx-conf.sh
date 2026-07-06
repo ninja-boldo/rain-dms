@@ -1,0 +1,279 @@
+#!/bin/bash
+set -o allexport
+source ../.env # import all env vars (relevant for substitution in the config)
+set +o allexport
+
+cat > nginx.conf <<EOF
+
+events {}
+stream {
+    resolver 127.0.0.11 valid=10s;
+
+    upstream rabbitmq_backend {
+        server rabbitmq:5672;
+    }
+
+    server {
+        listen 5671 ssl; 
+        
+        ssl_certificate     /etc/nginx/certs/rain.dms.cert.pem;
+        ssl_certificate_key /etc/nginx/certs/rain.dms.cert-key.pem;
+
+        ssl_protocols       TLSv1.2 TLSv1.3;
+        ssl_ciphers         HIGH:!aNULL:!MD5;
+
+        proxy_pass          rabbitmq_backend;
+
+        proxy_timeout       12h;
+        proxy_connect_timeout 15s;
+    }
+}
+
+
+http {
+set_real_ip_from  192.168.65.0/24;
+set_real_ip_from  172.16.0.0/12;
+real_ip_header    X-Forwarded-For;
+real_ip_recursive on;
+
+add_header X-Debug-Stage \$upstream_status always;
+add_header X-Debug-Upstream \$upstream_addr always;
+add_header X-Debug-Host \$host always;
+add_header X-Debug-URI \$request_uri always;
+
+include           /etc/nginx/mime.types;
+default_type      application/octet-stream;
+
+
+
+proxy_cache_path    /var/cache/nginx/auth_cache levels=1:2 keys_zone=auth_cache:1m max_size=25m inactive=1m;
+
+
+# 1. Map to catch any 4xx or 5xx status codes specifically for s3 auditing
+map \$status \$log_s3_err {
+    ~^[45]  1;
+    default 0;
+}
+
+log_format proxied '\$realip_remote_addr [\$http_x_forwarded_for] - \$remote_user [\$time_local] '
+                   '"\$request" \$status \$body_bytes_sent '
+                   '"\$http_referer" "\$http_user_agent"';
+
+log_format debug '\$time_local | \$status | \$request_method \$request_uri | '
+                 'ip=\$remote_addr | ua="\$http_user_agent" | '
+                 'upstream=\$upstream_addr | upstream_status=\$upstream_status | '
+                 'auth=\$upstream_http_x_auth_error';
+
+# Comprehensive pipeline trace layout
+log_format ultra_verbose_s3_err '\n--- S3 PIPELINE EXCEPTION TRACE ---\n'
+                                 'Timestamp:       \$time_local\n'
+                                 'Request:         \$request_method \$scheme://\$host\$request_uri\n'
+                                 'Client IP:       \$remote_addr (Real IP: \$realip_remote_addr)\n'
+                                 'Final Status:    HTTP \$status\n'
+                                 'Main Upstream:   Addr: \$upstream_addr | Status: \$upstream_status | Latency: \$upstream_response_time\n'
+                                 'Auth Subrequest: Status: \$auth_status | Detail: "\$err_detail"\n'
+                                 'Internal States: Fail Stage: "\$err_stage"\n'
+                                 'Headers:         UA: "\$http_user_agent"\n'
+                                 '----------------------------------------';
+
+access_log /dev/stdout proxied;
+error_log  /dev/stderr warn;
+
+client_max_body_size 5000M;
+
+gzip on;
+gzip_types text/css application/javascript image/svg+xml application/json;
+gzip_min_length 1000;
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name $SERVER_IP;
+
+    ssl_certificate     /etc/nginx/certs/rain.dms.cert.pem;
+    ssl_certificate_key /etc/nginx/certs/rain.dms.cert-key.pem;
+
+    client_body_timeout   300s;
+    client_header_timeout 300s;
+
+    # Initialize variables
+    set \$err_stage "unknown";
+    set \$err_detail "none";
+    set \$err_upstream \$upstream_addr;
+    set \$err_status \$upstream_status;
+    set \$auth_status "-";
+
+    error_page 403 = @honeypot;
+
+
+    location @honeypot {
+        access_log /dev/stdout proxied;
+        default_type application/json;
+        return 200 '{"status":"ok","documents":[],"total":0}';
+    } 
+
+    location / {
+        allow 192.168.1.0/24;
+        allow 127.0.0.1;
+        allow 192.168.65.1;
+        allow 172.16.0.0/12;
+        allow 100.92.95.35;
+        allow 100.107.209.122;
+        allow 100.118.192.48;
+        allow 100.93.54.77;
+        deny all;
+
+        root /usr/share/nginx/html;
+        index index.html;
+        try_files \$uri \$uri/ /index.html;
+    }
+
+    location = /_auth {
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Debug-Stage "auth_subrequest";
+
+        internal;
+        resolver 127.0.0.11 valid=10s;
+
+        set \$auth_target "https://server:3000/auth/validate-jwt";
+        proxy_pass \$auth_target;
+
+        proxy_cache_valid 200 5m;
+        proxy_cache             auth_cache;
+        proxy_cache_key         "$http_x_auth_token$request_uri";
+
+        proxy_ssl_verify off;
+
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+
+        proxy_set_header Authorization  \$http_authorization;
+        proxy_set_header X-Auth-Token   \$http_x_auth_token;
+        proxy_set_header X-Username     \$http_x_username;
+    }
+
+    location /s3/ {
+        allow 192.168.1.0/24;
+        allow 127.0.0.1;
+        allow 192.168.65.1;
+        allow 172.16.0.0/12;
+        allow 100.92.95.35;
+        allow 100.107.209.122;
+        allow 100.118.192.48;
+        allow 100.93.54.77;
+        deny all;
+
+        proxy_intercept_errors on;
+
+        # 1. Trigger the auth check subrequest
+        auth_request /_auth;
+
+        # 2. IMMEDIATELY map variables right after the subrequest evaluates
+        auth_request_set \$auth_status \$upstream_status;
+        auth_request_set \$auth_error_reason \$upstream_http_x_auth_error;
+        
+        # 3. Safely pass data to your error loggers and states
+        auth_request_set \$err_stage "auth";
+        auth_request_set \$err_detail \$auth_error_reason;
+
+        proxy_set_header Authorization      \$http_authorization;
+        proxy_set_header X-Auth-Token       \$http_x_auth_token;
+        proxy_set_header X-Debug-S3         "nginx-proxy";
+        proxy_set_header X-Debug-Path       \$request_uri;
+        proxy_set_header Host               \$proxy_host;
+        proxy_set_header X-Real-IP          \$remote_addr;
+        proxy_set_header X-Forwarded-For    \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto  \$scheme;
+        add_header X-Reached-S3 yes always;
+        add_header X-Upstream \$upstream_addr always;
+
+        error_page 400 401 403 404 405 500 502 503 504 = @s3_error;
+
+        rewrite ^/s3/(.*)\$ /\$1 break;
+
+        proxy_request_buffering off;
+        proxy_buffering         off;
+        proxy_http_version      1.1;
+        proxy_set_header        Connection "";
+
+        client_body_buffer_size 16M;
+
+        proxy_connect_timeout   300s;
+        proxy_send_timeout      300s;
+        proxy_read_timeout      300s;
+
+        # Standard logs
+        error_log /dev/stderr info;
+        access_log /dev/stdout proxied;
+        
+        # 2. DOUBLE CONDITIONAL LOGGING (Logs detailed states if something fails)
+        access_log /dev/stdout ultra_verbose_s3_err if=\$log_s3_err;
+        access_log /var/log/nginx/s3_errors.log ultra_verbose_s3_err if=\$log_s3_err;
+
+        resolver 127.0.0.11 valid=10s;
+        proxy_pass http://s3:8333;
+    }
+
+    
+    location /api/ {
+        resolver 127.0.0.11 valid=10s;
+        set $node_backend "server:3000";
+
+        rewrite ^/api/(.*)$ /$1 break;
+        proxy_pass https://$node_backend;
+
+        proxy_ssl_verify    off;
+        proxy_http_version  1.1;
+        proxy_set_header    Connection          "";
+
+        proxy_set_header    Host                $host;
+        proxy_set_header    X-Real-IP           $remote_addr;
+        proxy_set_header    X-Forwarded-For     $proxy_add_x_forwarded_for;
+        proxy_set_header    X-Forwarded-Proto   $scheme;
+    }
+
+    location /identify/self {
+        access_log /dev/stdout proxied;
+        default_type application/json;
+        return 200 '{ "status": "ok", "identity": "nginx", "hex": "${SERVER_IDENT_HEX_STRING}" }';             
+    }
+
+    location @s3_error {
+        default_type application/xml;
+
+        set \$final_stage \$err_stage;
+        if (\$final_stage = "") { set \$final_stage "nginx_or_upstream"; }
+        
+        # If auth passed but upstream failed, track the backend stage
+        if (\$auth_status = "200") { set \$err_stage "s3_backend_upstream"; }
+
+        # Force execution of conditional logging inside named location execution context
+        access_log /dev/stdout ultra_verbose_s3_err if=\$log_s3_err;
+        access_log /var/log/nginx/s3_errors.log ultra_verbose_s3_err if=\$log_s3_err;
+
+        error_page 400 /_err400;
+        error_page 401 /_err401;
+        error_page 403 /_err403;
+        error_page 404 /_err404;
+        error_page 405 /_err405;
+        error_page 500 /_err500;
+        error_page 502 /_err502;
+        error_page 503 /_err503;
+        error_page 504 /_err504;
+
+        recursive_error_pages on;
+    }
+
+    location = /_err400 { internal; default_type application/xml; return 400 '<?xml version="1.0" encoding="UTF-8"?><Error><Code>S3PipelineError</Code><Message>Bad Request</Message><Stage>\$err_stage</Stage><HTTPStatus>400</HTTPStatus><Upstream>\$upstream_addr</Upstream></Error>'; }
+    location = /_err401 { internal; default_type application/xml; return 401 '<?xml version="1.0" encoding="UTF-8"?><Error><Code>S3PipelineError</Code><Message>Unauthorized</Message><Stage>\$err_stage</Stage><HTTPStatus>401</HTTPStatus><Upstream>\$upstream_addr</Upstream></Error>'; }
+    location = /_err403 { internal; default_type application/xml; return 403 '<?xml version="1.0" encoding="UTF-8"?><Error><Code>S3PipelineError</Code><Message>Forbidden</Message><Stage>\$err_stage</Stage><HTTPStatus>403</HTTPStatus><Upstream>\$upstream_addr</Upstream></Error>'; }
+    location = /_err404 { internal; default_type application/xml; return 404 '<?xml version="1.0" encoding="UTF-8"?><Error><Code>S3PipelineError</Code><Message>Not Found</Message><Stage>\$err_stage</Stage><HTTPStatus>404</HTTPStatus><Upstream>\$upstream_addr</Upstream></Error>'; }
+    location = /_err405 { internal; default_type application/xml; return 405 '<?xml version="1.0" encoding="UTF-8"?><Error><Code>S3PipelineError</Code><Message>Method Not Allowed</Message><Stage>\$err_stage</Stage><HTTPStatus>405</HTTPStatus><Upstream>\$upstream_addr</Upstream></Error>'; }
+    location = /_err500 { internal; default_type application/xml; return 500 '<?xml version="1.0" encoding="UTF-8"?><Error><Code>S3PipelineError</Code><Message>Internal Server Error</Message><Stage>\$err_stage</Stage><HTTPStatus>500</HTTPStatus><Upstream>\$upstream_addr</Upstream></Error>'; }
+    location = /_err502 { internal; default_type application/xml; return 502 '<?xml version="1.0" encoding="UTF-8"?><Error><Code>S3PipelineError</Code><Message>Bad Gateway</Message><Stage>\$err_stage</Stage><HTTPStatus>502</HTTPStatus><Upstream>\$upstream_addr</Upstream></Error>'; }
+    location = /_err503 { internal; default_type application/xml; return 503 '<?xml version="1.0" encoding="UTF-8"?><Error><Code>S3PipelineError</Code><Message>Service Unavailable</Message><Stage>\$err_stage</Stage><HTTPStatus>503</HTTPStatus><Upstream>\$upstream_addr</Upstream></Error>'; }
+    location = /_err504 { internal; default_type application/xml; return 504 '<?xml version="1.0" encoding="UTF-8"?><Error><Code>S3PipelineError</Code><Message>Gateway Timeout</Message><Stage>\$err_stage</Stage><HTTPStatus>504</HTTPStatus><Upstream>\$upstream_addr</Upstream></Error>'; }
+# 
+}
+}
+EOF

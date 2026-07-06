@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   integer,
   pgTable,
@@ -83,10 +84,17 @@ export const pagesTable = pgTable(
     ocr: jsonb("ocr").notNull(),
   },
   (table) => [
-    // Foreign key lookup optimization when fetching pages for a specific document
     index("idx_pages_file_id").on(table.file_id),
-
-    // Composite index for sequential document layout building
     index("main_idx_pages").on(table.file_id, table.page_id, table.page_idx),
+
+    // Partial index to speed up counting pages that have OCR results.
+    index("idx_pages_ocr_done")
+      .on(table.file_id)
+      .where(sql`${table.ocr} <> '{}'::jsonb`),
   ],
 );
+
+export const statsCountersTable = pgTable("stats_counters", {
+  key: varchar({ length: 64 }).primaryKey(),
+  value: integer("value").notNull().default(0),
+});

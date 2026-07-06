@@ -47,4 +47,7 @@ postgres_data/
 pg_wal/
 pg_wal
 check.sh
+
+
 test_documents
+backend/test.ts

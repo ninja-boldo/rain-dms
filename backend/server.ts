@@ -33,7 +33,10 @@ const pgPool = new Pool({
   max: 15,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,
+  statement_timeout: 8_000, // kill any single query after 8s
+  query_timeout: 8_000,
 });
+
 const db = drizzle(pgPool);
 
 interface CacheEntry {
@@ -50,6 +53,8 @@ async function getSharedQueue() {
   return sharedQueueHandler;
 }
 
+const _inFlight = new Map<string, Promise<any>>();
+
 async function withCache<T>(
   key: string,
   ttlMs: number,
@@ -57,9 +62,22 @@ async function withCache<T>(
 ): Promise<T> {
   const hit = _cache.get(key);
   if (hit && Date.now() < hit.exp) return hit.v as T;
-  const v = await fn();
-  _cache.set(key, { v, exp: Date.now() + ttlMs });
-  return v;
+
+  if (_inFlight.has(key)) return _inFlight.get(key) as Promise<T>;
+
+  const p = fn()
+    .then((v) => {
+      _cache.set(key, { v, exp: Date.now() + ttlMs });
+      _inFlight.delete(key);
+      return v;
+    })
+    .catch((e) => {
+      _inFlight.delete(key);
+      throw e;
+    });
+
+  _inFlight.set(key, p);
+  return p;
 }
 
 function invalidate(...keys: string[]) {
@@ -390,12 +408,11 @@ async function computeStats() {
             ),
         })
         .from(documentsTable),
-
       db
         .select({
           totalPages: sql<number>`count(*)`.mapWith(Number),
           pagesWithOcr:
-            sql<number>`count(*) filter (where ${pagesTable.ocr} is not null and ${pagesTable.ocr}::text != '{}')`.mapWith(
+            sql<number>`count(*) filter (where ${pagesTable.ocr} <> '{}'::jsonb)`.mapWith(
               Number,
             ),
         })
@@ -537,7 +554,6 @@ async function computeWorkers() {
   const enrich = (
     consumers: Awaited<ReturnType<typeof qh.getConsumerDetails>>,
   ) => {
-
     const uniqueMap = new Map<string, any>();
     for (const con of consumers) {
       const key = `${con.peerHost}:${con.peerPort}`;
@@ -668,7 +684,11 @@ app.get("/queue-peek", async (c) => {
       merge_queue: { messages: stats.merge_queue_length },
     });
   } catch (e: any) {
-    return c.json({ ocr_queue: { messages: 0 }, merge_queue: { messages: 0 } });
+    const fallback = {
+      ocr_queue: { messages: 0 },
+      merge_queue: { messages: 0 },
+    };
+    return c.json(fallback as any);
   }
 });
 
@@ -828,7 +848,6 @@ app.get("/pages", async (c) => {
     .where(eq(documentsTable.fileS3Key, filepath))
     .orderBy(asc(pagesTable.page_idx));
 
-
   const resModed = res.map((file) => ({
     ...file,
     banner_img: bannerImgRelativePath(file.banner_img),
@@ -967,7 +986,6 @@ app.get("/download", async (c) => {
   const bucketName: string = fileKey.endsWith("webp")
     ? BucketNames.bannerImgs
     : BucketNames.userUploads;
-
 
   const s3Url = `${await resolveS3BaseUrl(true)}${bucketName}/${fileKey}`;
 

@@ -1,36 +1,41 @@
 apiVersion: crd.projectcalico.org/v1
-kind: GlobalNetworkSet
-metadata:
-  name: ip-allow-list
-  labels:
-    ip-trusted: "true"
-spec:
-  nets:
-    - 192.168.1.0/24
-
----
-apiVersion: crd.projectcalico.org/v1
 kind: GlobalNetworkPolicy
 metadata:
-  name: egress-strict-allowlist
+  name: deny-app-policy
 spec:
-  selector: apply-ip-protect == 'true'
-  order: 0
+  namespaceSelector: '!has(projectcalico.org/name) || (projectcalico.org/name not in {"calico-system", "kube-public", "kube-system", "tigera-operator"})'
   types:
     - Egress
-  egress:
-    # allow all internal cluster-to-cluster traffic
-    - action: Allow
-      destination:
-        selector: has(projectcalico.org/namespace)
 
-    # allow DNS resolution
+  egress:
+    # Allow all namespaces to communicate with DNS pods (UDP)
     - action: Allow
       protocol: UDP
       destination:
-        ports: [53]
+        selector: 'k8s-app == "kube-dns"'
+        ports:
+          - 53
 
-    # allow egress only to trusted address range X
+    # Allow all namespaces to communicate with DNS pods (TCP)
     - action: Allow
+      protocol: TCP
       destination:
-        selector: ip-trusted == 'true' && !has(projectcalico.org/namespace)
+        selector: 'k8s-app == "kube-dns"'
+        ports:
+          - 53
+
+    # Allow TCP traffic to local LAN
+    # Example: HTTP, HTTPS, SSH, databases, etc.
+    - action: Allow
+      protocol: TCP
+      destination:
+        nets:
+          - 192.168.1.0/24
+
+    # Allow UDP traffic to local LAN
+    # Example: DNS, NTP, discovery protocols, etc.
+    - action: Allow
+      protocol: UDP
+      destination:
+        nets:
+          - 192.168.1.0/24

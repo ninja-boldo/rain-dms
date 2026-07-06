@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-REPO="http://192.168.1.13:3000/bennet/rain-dms.git"
+REPO="https://github.com/ninja-boldo/rain-dms.git"
 DIR="rain-dms"
 ARCH=$(dpkg --print-architecture)
 
@@ -54,6 +54,13 @@ mv -f .env docker/.env
 mv -f frontend/dist docker/dist
 
 chmod +x deployment/apply-kubectl.sh
+chmod +x docker/config/generate-nginx-conf.sh
+
+cd docker/config
+./generate-nginx-conf.sh
+cd ..
+cd ..
+
 
 echo ""
 echo "IMPORTANT: Review secrets in docker/.env before deployment."

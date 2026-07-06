@@ -6,6 +6,8 @@ import { useUploadStore } from "../store/uploads";
 import UploadPanel from "./UploadPanel";
 import ToastHost from "./ToastHost";
 import UrlSubstitutionPrompt from "./UrlSubstitutionPrompt";
+import ErrorLogMenu from "./ErrorLogMenu";
+import { useAllReminders } from "../store/localData";
 import { useI18n } from "../i18n";
 
 export default function Layout() {
@@ -19,6 +21,8 @@ export default function Layout() {
   const [navOpen, setNavOpen] = useState(false);
 
   const { isOpen, toggle, running, jobs } = useUploadStore();
+  const allReminders = useAllReminders();
+  const pendingRemindersCount = allReminders.filter((r) => !r.done_at).length;
 
   const activeCount = jobs.filter(
     (j) => j.status.state === "uploading" || j.status.state === "hashing",
@@ -69,6 +73,9 @@ export default function Layout() {
             rain<span style={{ color: "var(--accent)" }}>·dms</span>
           </span>
         </div>
+        <div style={{ marginLeft: "auto" }}>
+          <ErrorLogMenu />
+        </div>
       </div>
 
       {/* Backdrop for mobile drawer */}
@@ -86,18 +93,27 @@ export default function Layout() {
             borderBottom: "1px solid var(--border-soft)",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <RainLogo />
-            <span
-              style={{
-                fontWeight: 700,
-                fontSize: "0.95rem",
-                color: "var(--text-1)",
-                letterSpacing: "-0.02em",
-              }}
-            >
-              rain<span style={{ color: "var(--accent)" }}>·dms</span>
-            </span>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <RainLogo />
+              <span
+                style={{
+                  fontWeight: 700,
+                  fontSize: "0.95rem",
+                  color: "var(--text-1)",
+                  letterSpacing: "-0.02em",
+                }}
+              >
+                rain<span style={{ color: "var(--accent)" }}>·dms</span>
+              </span>
+            </div>
+            <ErrorLogMenu />
           </div>
           {username && (
             <p
@@ -172,7 +188,12 @@ export default function Layout() {
         >
           <SideLink to="/" label={t.nav_documents} icon={<DocsIcon />} end />
           <SideLink to="/search" label={t.nav_search} icon={<SearchIcon />} />
-          <SideLink to="/stats" label={t.nav_stats} icon={<StatsIcon />} />
+          <SideLink
+            to="/stats"
+            label={t.nav_stats}
+            icon={<StatsIcon />}
+            badge={pendingRemindersCount}
+          />
         </nav>
 
         {/* Bottom */}
@@ -238,11 +259,13 @@ function SideLink({
   label,
   icon,
   end,
+  badge,
 }: {
   to: string;
   label: string;
   icon: React.ReactNode;
   end?: boolean;
+  badge?: number;
 }) {
   return (
     <NavLink
@@ -263,7 +286,22 @@ function SideLink({
       })}
     >
       {icon}
-      {label}
+      <span style={{ flex: 1 }}>{label}</span>
+      {!!badge && (
+        <span
+          style={{
+            background: "var(--accent)",
+            color: "var(--accent-fg)",
+            borderRadius: 999,
+            fontSize: "0.62rem",
+            fontWeight: 700,
+            padding: "0 6px",
+            fontFamily: "JetBrains Mono, monospace",
+          }}
+        >
+          {badge}
+        </span>
+      )}
     </NavLink>
   );
 }

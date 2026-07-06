@@ -331,7 +331,7 @@ export default function LoginPage() {
                     color: "var(--text-3)",
                   }}
                 >
-{t.lg_apiUrlHint(window.location.origin)}
+                  {t.lg_apiUrlHint(window.location.origin)}
                 </p>
               </div>
             )}

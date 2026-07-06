@@ -272,7 +272,9 @@ function NodeRow({
               onTogglePick(node.doc.fileS3Key);
             } else {
               onSelect(node.doc);
-              nav(`/document?filepath=${encodeURIComponent(node.doc.fileS3Key)}`);
+              nav(
+                `/document?filepath=${encodeURIComponent(node.doc.fileS3Key)}`,
+              );
             }
           } else {
             onToggleOpen(node.fullPath);
@@ -974,7 +976,11 @@ export default function FileTree({
             <button onClick={selectAllVisible} style={smallBtn}>
               {documents.length}
             </button>
-            <button onClick={clearPicked} style={smallBtn} disabled={picked.size === 0}>
+            <button
+              onClick={clearPicked}
+              style={smallBtn}
+              disabled={picked.size === 0}
+            >
               ✕
             </button>
             {picked.size > 0 && (
@@ -985,7 +991,9 @@ export default function FileTree({
                   ...smallBtn,
                   color: "var(--danger)",
                   borderColor: "rgba(248,113,113,0.35)",
-                  background: deleteConfirm ? "rgba(248,113,113,0.15)" : undefined,
+                  background: deleteConfirm
+                    ? "rgba(248,113,113,0.15)"
+                    : undefined,
                   marginLeft: "auto",
                 }}
               >

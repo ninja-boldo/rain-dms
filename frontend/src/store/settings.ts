@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { darken, withAlpha, pickForeground, isValidHex, normalizeHex } from "../utils/color";
+import {
+  darken,
+  withAlpha,
+  pickForeground,
+  isValidHex,
+  normalizeHex,
+} from "../utils/color";
 
 const ACCENT_PRESETS = {
   amber: {
@@ -65,7 +71,11 @@ function applyAccent(accent: AccentKey, customAccent: string | null) {
   const preset =
     accent === "custom" && customAccent && isValidHex(customAccent)
       ? paletteFor(normalizeHex(customAccent))
-      : ACCENT_PRESETS[(accent === "custom" ? "amber" : accent) as keyof typeof ACCENT_PRESETS];
+      : ACCENT_PRESETS[
+          (accent === "custom"
+            ? "amber"
+            : accent) as keyof typeof ACCENT_PRESETS
+        ];
   const r = document.documentElement;
   r.style.setProperty("--accent", preset.accent);
   r.style.setProperty("--accent-dim", preset.dim);
@@ -179,7 +189,9 @@ export const useSettingsStore = create<SettingsState>()(
       },
       removeUrlSubstitution: (from) =>
         set({
-          urlSubstitutions: get().urlSubstitutions.filter((s) => s.from !== from),
+          urlSubstitutions: get().urlSubstitutions.filter(
+            (s) => s.from !== from,
+          ),
         }),
       dismissOrigin: (origin) => {
         if (get().dismissedOrigins.includes(origin)) return;

@@ -2,7 +2,13 @@
 
 export function hexToRgb(hex: string): [number, number, number] {
   const h = hex.replace("#", "").trim();
-  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const full =
+    h.length === 3
+      ? h
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : h;
   const num = parseInt(full, 16) || 0;
   return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
 }
@@ -17,10 +23,18 @@ export function rgbToHex(r: number, g: number, b: number): string {
   );
 }
 
-function mixToward(hex: string, target: [number, number, number], amount: number): string {
+function mixToward(
+  hex: string,
+  target: [number, number, number],
+  amount: number,
+): string {
   const [r, g, b] = hexToRgb(hex);
   const [tr, tg, tb] = target;
-  return rgbToHex(r + (tr - r) * amount, g + (tg - g) * amount, b + (tb - b) * amount);
+  return rgbToHex(
+    r + (tr - r) * amount,
+    g + (tg - g) * amount,
+    b + (tb - b) * amount,
+  );
 }
 
 export function darken(hex: string, amount = 0.18): string {
