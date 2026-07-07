@@ -1,6 +1,7 @@
 {
   "name": "rain-dms-backend",
   "version": "1.0.0",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "db": "bunx drizzle-kit push",

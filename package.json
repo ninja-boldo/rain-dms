@@ -1,5 +1,6 @@
 {
   "name": "rain-dms",
+  "license": "MIT",
   "scripts": {
     "setup": "bash backend/certs/create_certs.sh",
     "dev": "bun run setup && bun run dev::backend",

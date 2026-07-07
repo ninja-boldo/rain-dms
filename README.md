@@ -130,3 +130,7 @@ deployment/       Ansible playbooks, k3s manifests, KEDA scaler, cluster bootstr
 ## Status
 
 Actively developed. Core pipeline (upload → OCR → index → search) is stable; encryption-at-rest and k3s hardening are ongoing work.
+
+## License
+
+MIT
