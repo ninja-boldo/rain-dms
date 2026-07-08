@@ -42,10 +42,14 @@ export const documentsTable = pgTable(
     spawnedInPipelineIso: text("spawned_in_pipeline_iso").notNull(),
     fileHash: text("file_hash").notNull().unique(),
     encryption_key: text("encryption_key"),
+    pageCount: integer().notNull().default(0),
+    extension: text().notNull().default("unknown"),
   },
   (table) => [
-    // Change this to use the exact property name: table.fileHash
     index("idx_documents_file_hash").on(table.fileHash),
+
+    index("idx_documents_page_count").on(table.pageCount.desc()),
+    index("idx_documents_extension").on(table.extension),
 
     index("main_idx_documents").on(
       table.file_id,

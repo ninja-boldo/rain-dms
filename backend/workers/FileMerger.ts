@@ -5,6 +5,7 @@ import {
   OcrResult,
   QueueNames,
   QueueObjProcessOcrResult,
+  StatsTableKeys,
 } from "../utils/types/main";
 import {
   QueueHandler,
@@ -18,6 +19,8 @@ import {
 } from "../db/schema";
 import dotenv from "dotenv";
 import { Pool } from "pg";
+import { updateStatsTableKey } from "../utils/db/main";
+import path from "path";
 
 dotenv.config();
 
@@ -145,6 +148,11 @@ export class FileMerger {
         fileHash: file.fileHash,
         spawnedInPipelineIso: res.spawnedTime,
         encryption_key: encKey,
+        pageCount: file.pages.length,
+        extension:
+          path.extname(file.originalFilePath) !== ""
+            ? path.extname(file.originalFilePath)
+            : "unknown",
       })
       .onConflictDoNothing()
       .returning({ file_id: documentsTable.file_id });
@@ -156,6 +164,8 @@ export class FileMerger {
       });
       return;
     }
+
+    await updateStatsTableKey(this.db, StatsTableKeys.totalDocuments, 1); // add to known documents for the stats page
 
     const fileId = inserted[0].file_id;
     this.log("INFO", "Document created", { fileId, fileHash: file.fileHash });
@@ -181,6 +191,12 @@ export class FileMerger {
         durationMs: Date.now() - batchStart,
       });
     }
+
+    await updateStatsTableKey(
+      this.db,
+      StatsTableKeys.totalPages,
+      file.pages.length,
+    ); // add to known pages for the stats page
 
     this.log("INFO", "File merged", {
       fileId,

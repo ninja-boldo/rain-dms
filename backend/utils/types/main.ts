@@ -111,6 +111,10 @@ export const ImportantDirs = {
   consumed: "consumed_files",
 } as const;
 
+export const StatsTableKeys = {
+  totalPages: "pages_known_to_system",
+  totalDocuments: "files_known_to_system",
+};
 export interface RawBlockNormalized {
   text: string;
   confidence: number;

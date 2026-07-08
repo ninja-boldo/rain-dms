@@ -1,13 +1,23 @@
 import bcrypt from "bcryptjs";
 import "dotenv/config";
-import { asc, desc, eq, sql, and } from "drizzle-orm";
+import { asc, desc, eq, sql, and, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Hono } from "hono";
+import { Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import jwt from "jsonwebtoken";
 import { Pool } from "pg";
-import { documentsTable, pagesTable, usersTable } from "./db/schema";
-import { BucketNames, QueueNames, QueueStats } from "./utils/types/main";
+import {
+  documentsTable,
+  pagesTable,
+  statsCountersTable,
+  usersTable,
+} from "./db/schema";
+import {
+  BucketNames,
+  QueueNames,
+  QueueStats,
+  StatsTableKeys,
+} from "./utils/types/main";
 import fs from "fs";
 import { QueueHandler } from "./utils/helperClasses/QueueConnector";
 import path from "node:path";
@@ -27,13 +37,14 @@ import {
 import { encryptTxt, passwordToKeyHex } from "./utils/trust/cryptography";
 import { getMainEncryptionKey } from "./utils/trust/envHelpers";
 import { getMeilisearch, syncIndex } from "./utils/helperClasses/IndexBuilder";
+import { getKeysFromStatsTable } from "./utils/db/main";
 
 const pgPool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: 15,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,
-  statement_timeout: 8_000, // kill any single query after 8s
+  statement_timeout: 15_000, // kill any single query after 15s
   query_timeout: 8_000,
 });
 
@@ -385,11 +396,15 @@ app.post("/auth/signin", async (c) => {
 });
 
 async function computeStats() {
-  const [docRes, pageRes, extRes, sizeRes, biggestFilesRes, sparklineRes] =
+  const [counters, docRes, pageRes, extRes, biggestFilesRes, sparklineRes] =
     await Promise.all([
+      getKeysFromStatsTable(db, [
+        StatsTableKeys.totalDocuments,
+        StatsTableKeys.totalPages,
+      ]),
+
       db
         .select({
-          total: sql<number>`count(*)`.mapWith(Number),
           lastHour:
             sql<number>`count(*) filter (where ${documentsTable.createdAt} >= now() - interval '1 hour')`.mapWith(
               Number,
@@ -407,10 +422,11 @@ async function computeStats() {
               Number,
             ),
         })
-        .from(documentsTable),
+        .from(documentsTable)
+        .where(sql`${documentsTable.createdAt} >= now() - interval '30 days'`),
+
       db
         .select({
-          totalPages: sql<number>`count(*)`.mapWith(Number),
           pagesWithOcr:
             sql<number>`count(*) filter (where ${pagesTable.ocr} <> '{}'::jsonb)`.mapWith(
               Number,
@@ -420,33 +436,19 @@ async function computeStats() {
 
       db
         .select({
-          ext: sql<string>`lower(substring(${documentsTable.fileS3Key} from '\\.([^.]+)$'))`,
+          ext: documentsTable.extension,
           count: sql<number>`count(*)`.mapWith(Number),
         })
         .from(documentsTable)
-        .groupBy(
-          sql`lower(substring(${documentsTable.fileS3Key} from '\\.([^.]+)$'))`,
-        ),
-
-      db
-        .select({ totalPages: sql<number>`count(*)`.mapWith(Number) })
-        .from(pagesTable)
-        .then((r) => {
-          const pageCount = r[0]?.totalPages ?? 0;
-          return pageCount * 100 * 1024;
-        }),
+        .groupBy(documentsTable.extension),
 
       db
         .select({
           filepath: documentsTable.fileS3Key,
-          page_count: sql<number>`count(${pagesTable.page_idx})`.mapWith(
-            Number,
-          ),
+          page_count: documentsTable.pageCount,
         })
         .from(documentsTable)
-        .innerJoin(pagesTable, eq(pagesTable.file_id, documentsTable.file_id))
-        .groupBy(documentsTable.fileS3Key)
-        .orderBy(sql`count(${pagesTable.page_idx}) desc`)
+        .orderBy(sql`${documentsTable.pageCount} desc`)
         .limit(20)
         .then((r) =>
           r.map((row) => ({
@@ -497,16 +499,15 @@ async function computeStats() {
   const byExtension: Record<string, number> = {};
   for (const row of extRes) if (row.ext) byExtension[row.ext] = row.count;
 
-  const totalPages = pageRes[0]?.totalPages ?? 0;
+  const totalDocuments = counters[StatsTableKeys.totalDocuments] ?? 0;
+  const totalPages = counters[StatsTableKeys.totalPages] ?? 0;
   const pagesWithOcr = pageRes[0]?.pagesWithOcr ?? 0;
-  const totalDocuments = docRes[0]?.total ?? 0;
-  const totalSizeBytes = sizeRes ?? 0;
+  const totalSizeBytes = totalPages * 100 * 1024;
   const ocr_coverage_pct =
     totalPages > 0 ? Math.round((pagesWithOcr / totalPages) * 100) : null;
   const avg_pages_per_doc =
     totalDocuments > 0 ? totalPages / totalDocuments : null;
 
-  // SESS: Deduping physical connections by unique host:port matching to prevent phantom counts
   const distinctOcrHosts = new Set(ocrConsumers.map((c) => c.peerHost)).size;
   const distinctMergeHosts = new Set(mergeConsumers.map((c) => c.peerHost))
     .size;
@@ -836,6 +837,9 @@ app.get("/search", async (c) => {
 
 app.get("/pages", async (c) => {
   const filepath = c.req.query("filepath");
+  const maxPages: number = parseInt(c.req.query("limit") ?? "10000"); // load all by default
+  const pagesToSkip: number = parseInt(c.req.query("offset") ?? "0");
+
   if (!filepath) return c.json({ error: "Missing filepath" }, 400);
   const res = await db
     .select({
@@ -846,6 +850,8 @@ app.get("/pages", async (c) => {
     .from(pagesTable)
     .innerJoin(documentsTable, eq(pagesTable.file_id, documentsTable.file_id))
     .where(eq(documentsTable.fileS3Key, filepath))
+    .limit(maxPages)
+    .offset(pagesToSkip)
     .orderBy(asc(pagesTable.page_idx));
 
   const resModed = res.map((file) => ({
@@ -951,19 +957,46 @@ app.post("/upload", async (c) => {
   }
 });
 
-app.delete("/delete/consume", async (c) => {
+class NotFoundError extends Error {}
+
+async function handleDeleteDocument(c: Context) {
   const filepath = c.req.query("filepath");
   if (!filepath) return c.json({ error: "Missing filepath" }, 400);
+
   try {
-    const doc = await db
-      .select({ file_id: documentsTable.file_id })
-      .from(documentsTable)
-      .where(eq(documentsTable.fileS3Key, filepath))
-      .limit(1);
-    if (!doc.length) return c.json({ error: "Document not found" }, 404);
-    const fileId = doc[0].file_id;
-    await db.delete(pagesTable).where(eq(pagesTable.file_id, fileId));
-    await db.delete(documentsTable).where(eq(documentsTable.file_id, fileId));
+    const { fileId, pagesDeleted } = await db.transaction(async (tx) => {
+      // pages deleted via subquery on file_s3_key — no separate select round trip
+      const deletedPages = await tx.execute(sql`
+        DELETE FROM pages
+        WHERE file_id = (SELECT file_id FROM documents WHERE file_s3_key = ${filepath})
+        RETURNING page_id
+      `);
+
+      const deletedDocs = await tx.execute(sql`
+        DELETE FROM documents WHERE file_s3_key = ${filepath} RETURNING file_id
+      `);
+
+      if (deletedDocs.rows.length === 0) {
+        throw new NotFoundError();
+      }
+
+      const fileId = deletedDocs.rows[0].file_id as number;
+      const pagesDeleted = deletedPages.rows.length;
+
+      // both counters in one atomic statement instead of two select+update round trips
+      await tx.execute(sql`
+        UPDATE stats_counters
+        SET value = stats_counters.value + d.delta
+        FROM (VALUES
+          (${StatsTableKeys.totalPages}, ${-pagesDeleted}),
+          (${StatsTableKeys.totalDocuments}, ${-1})
+        ) AS d(key, delta)
+        WHERE stats_counters.key = d.key
+      `);
+
+      return { fileId, pagesDeleted };
+    });
+
     try {
       const meili = await getMeilisearch();
       await meili
@@ -972,13 +1005,20 @@ app.delete("/delete/consume", async (c) => {
     } catch (e) {
       console.warn("MeiliSearch delete warning:", e);
     }
+
     invalidate("stats");
     return c.json({ deleted: true, filepath, file_id: fileId });
   } catch (e: any) {
+    if (e instanceof NotFoundError) {
+      return c.json({ error: "Document not found" }, 404);
+    }
     console.error("Delete error:", e);
     return c.json({ error: e.message }, 500);
   }
-});
+}
+
+app.delete("/delete/consume", handleDeleteDocument);
+app.delete("/delete/document", handleDeleteDocument);
 
 app.get("/download", async (c) => {
   const fileKey = c.req.query("fileKey");
