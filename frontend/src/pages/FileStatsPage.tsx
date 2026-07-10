@@ -5,20 +5,7 @@ import type { Document } from "../api/client";
 import { useLocalStore, type LocalMarker } from "../store/localData";
 import { useI18n } from "../i18n";
 import { reportSuccess } from "../store/toast";
-
-function cleanFileName(key: string): string {
-  if (!key) return "";
-  const base = key.split("/").pop() ?? key;
-  return base
-    .replace(
-      /-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}(\.[^.]+)$/i,
-      "$1",
-    )
-    .replace(
-      /-\d{4}-\d{2}-\d{2}[T_]\d{2}[:\-]\d{2}[:\-]\d{2}[\.\dZ]*(\.[^.]+)$/i,
-      "$1",
-    );
-}
+import { cleanFileName } from "../utils/filename";
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -127,7 +114,7 @@ export default function FileStatsPage() {
     if (!filepath) return;
     setLoading(true);
     setError(null);
-    Promise.all([getDocument(filepath), getPages(filepath)])
+    Promise.all([getDocument(filepath), getPages(filepath, { includeOcr: true })])
       .then(([d, p]) => {
         setStats({
           doc: d,

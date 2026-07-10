@@ -4,8 +4,6 @@ import { checkUserIsExisting } from "../trust/auth";
 
 const USERS_REGISTERED: string[] = [];
 
-const dockerHostnames: string[] = ["nginx"];
-
 export const changeFilenameForPath = (
   filepath: string | undefined,
   newFilename: string,
@@ -32,30 +30,26 @@ export const sanitizeUrl = (url: string): string => {
   return `https://${url.replace(/^(?:https?:\/\/?)+/gi, "")}`;
 };
 
-export const formatFilename = (
-  filepath: string,
-  basePathToRemove?: string | null | undefined,
-): string => {
-  const key =
-    basePathToRemove && filepath.startsWith(basePathToRemove)
-      ? filepath.slice(basePathToRemove.length)
-      : filepath;
+const MAX_KEY_BYTES = 175; // leave headroom under the 255 filer limit for uuid+timestamp+ext
 
-  const { dir, name, ext } = path.parse(key);
+function truncateToByteBudget(name: string, budget: number): string {
+  let out = name;
+  while (Buffer.byteLength(out, "utf8") > budget) out = out.slice(0, -1);
+  return out;
+}
 
-  const suffix = `-${uuidv4()}-${new Date().toISOString().replace(/:/g, "-")}`;
-  const prefix = dir ? `${dir}/` : "";
+export async function formatFilename(finalPath: string, tempFolder: string): Promise<string> {
+  const ext = path.extname(finalPath);
+  const base = path.basename(finalPath, ext);
+  const uuid = uuidv4();
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
 
-  const allowedBytes = 1024 - Buffer.byteLength(prefix + suffix + ext, "utf8");
+  // reserve room for "-<uuid>-<ts><ext>"
+  const suffixLen = Buffer.byteLength(`-${uuid}-${ts}${ext}`, "utf8");
+  const safeBase = truncateToByteBudget(base, MAX_KEY_BYTES - suffixLen);
 
-  let truncated = name;
-
-  while (Buffer.byteLength(truncated, "utf8") > allowedBytes) {
-    truncated = [...truncated].slice(0, -1).join("");
-  }
-
-  return `${prefix}${truncated}${suffix}${ext}`;
-};
+  return `${safeBase}-${uuid}-${ts}${ext}`;
+}
 
 export function prependImgKey(imgKey: string): string {
   const s3Prepend = "/s3/";
@@ -107,14 +101,17 @@ export function sanitizeFilePath(
   return path.join(dir, truncated + ext);
 }
 
-export function sanitizeS3Key(key: string): string {
-  return key
+export function sanitizeS3Key(key: string, maxLen = 255): string {
+  const sanitized = key
     .replace(/\\/g, "/")
     .replace(/^\/+/, "")
     .replace(/\/+/g, "/")
     .normalize("NFC")
     .replace(/[^\p{L}\p{N}._\-\/]/gu, "_");
+
+  return sanitized
 }
+
 
 export const isFilepath = (s: string) => !s.startsWith("http");
 

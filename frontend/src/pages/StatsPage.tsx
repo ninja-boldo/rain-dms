@@ -7,6 +7,7 @@ import {
   type GlobalReminder,
 } from "../store/localData";
 import { useI18n } from "../i18n";
+import { cleanFileName } from "../utils/filename";
 
 function fmt(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -1128,7 +1129,7 @@ export default function StatsPage() {
                   }}
                   title={f.filepath}
                 >
-                  {f.filepath?.split("/").pop() ?? f.filepath}
+                  {cleanFileName(f.filepath) || f.filepath}
                 </span>
                 <span
                   style={{

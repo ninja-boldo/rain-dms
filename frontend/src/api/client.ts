@@ -174,10 +174,25 @@ export const searchDocuments = (
   return apiFetch<SearchResponse>(`/search?${p}`);
 };
 
-export const getPages = (filepath: string) =>
-  apiFetch<{ pages: Page[]; total: number; filepath: string }>(
-    `/pages?filepath=${encodeURIComponent(filepath)}`,
+/**
+ * `includeOcr` controls whether the (potentially huge) per-page OCR JSON is
+ * fetched at all — the server skips selecting that column entirely when
+ * it's false, which is what keeps opening a long document fast. Pass
+ * `offset`/`limit` to fetch a single page's OCR on demand (e.g. only for
+ * pages currently scrolled into view) instead of the whole document at once.
+ */
+export const getPages = (
+  filepath: string,
+  opts?: { includeOcr?: boolean; offset?: number; limit?: number },
+) => {
+  const p = new URLSearchParams({ filepath });
+  if (opts?.includeOcr) p.set("includeOcr", "true");
+  if (opts?.offset != null) p.set("offset", String(opts.offset));
+  if (opts?.limit != null) p.set("limit", String(opts.limit));
+  return apiFetch<{ pages: Page[]; total: number; filepath: string }>(
+    `/pages?${p}`,
   );
+};
 
 export const getDocument = (filepath: string) =>
   apiFetch<Document>(`/document?filepath=${encodeURIComponent(filepath)}`);

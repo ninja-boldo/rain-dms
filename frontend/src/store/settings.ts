@@ -117,6 +117,14 @@ interface SettingsState {
   urlSubstitutions: UrlSubstitution[];
   /** Origins the user has explicitly declined to substitute, so we don't ask again this browser. */
   dismissedOrigins: string[];
+  /**
+   * Whether to eagerly fetch full OCR data (bounding boxes for every page)
+   * the moment a document is opened. OCR JSON can be huge on long documents,
+   * so this defaults to off — pages load fast and OCR is fetched lazily,
+   * only for pages actually scrolled into view, unless this is enabled or
+   * the person turns the "OCR" overlay on for a specific document.
+   */
+  loadOcrByDefault: boolean;
 
   toggleTheme: () => void;
   setApiUrl: (url: string) => void;
@@ -128,6 +136,7 @@ interface SettingsState {
   addUrlSubstitution: (from: string, to: string) => void;
   removeUrlSubstitution: (from: string) => void;
   dismissOrigin: (origin: string) => void;
+  setLoadOcrByDefault: (v: boolean) => void;
 }
 
 export function apiUrlToNginxBase(apiBase: string): string {
@@ -160,6 +169,7 @@ export const useSettingsStore = create<SettingsState>()(
       allowedUploadExtensions: DEFAULT_ALLOWED_EXTENSIONS,
       urlSubstitutions: [],
       dismissedOrigins: [],
+      loadOcrByDefault: false,
 
       toggleTheme: () => {
         const next = get().theme === "dark" ? "light" : "dark";
@@ -197,6 +207,7 @@ export const useSettingsStore = create<SettingsState>()(
         if (get().dismissedOrigins.includes(origin)) return;
         set({ dismissedOrigins: [...get().dismissedOrigins, origin] });
       },
+      setLoadOcrByDefault: (v) => set({ loadOcrByDefault: v }),
     }),
     { name: "rain-dms-settings" },
   ),

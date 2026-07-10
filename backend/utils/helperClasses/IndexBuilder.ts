@@ -45,6 +45,7 @@ async function runSync() {
           filepath: documentsTable.fileS3Key,
           created_at: documentsTable.createdAt,
           assigned_tags: documentsTable.assigned_tags,
+          page_count: documentsTable.pageCount,
           ocr: pagesTable.ocr,
           banner_img: pagesTable.page_banner_url,
           pageIdx: pagesTable.page_idx,
@@ -89,6 +90,11 @@ async function runSync() {
           }
         }
 
+        const createdAtMs =
+          doc.created_at instanceof Date
+            ? doc.created_at.getTime()
+            : new Date(doc.created_at as unknown as string).getTime();
+
         return {
           id: `${doc.id}_${doc.pageIdx}`,
           file_id: doc.id,
@@ -97,7 +103,9 @@ async function runSync() {
           assigned_tags: parsedTags,
           searchable_text: searchableText,
           banner_img: doc.banner_img,
-          created_at: doc.created_at,
+          created_at: createdAtMs,
+
+          page_count: doc.page_count ?? 0,
         };
       });
 
@@ -120,12 +128,15 @@ export async function syncIndex(intervalMs = 15000) {
     "assigned_tags",
     "file_id",
     "pageIdx",
+    "created_at",
   ]);
   await index.updateSearchableAttributes([
     "searchable_text",
     "filepath",
     "assigned_tags",
   ]);
+
+  await index.updateSortableAttributes(["created_at", "page_count"]);
   await runSync();
   setInterval(() => runSync().catch(console.error), intervalMs);
 }

@@ -1,24 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useSettingsStore } from "../store/settings";
 import { searchDocuments } from "../api/client";
 import type { SearchResponse } from "../api/client";
 import AuthImage from "../components/AuthImage";
 import { useI18n } from "../i18n";
-
-function cleanFileName(key: string): string {
-  if (!key) return "";
-  const base = key.split("/").pop() ?? key;
-  return base
-    .replace(
-      /-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}(\.[^.]+)$/i,
-      "$1",
-    )
-    .replace(
-      /-\d{4}-\d{2}-\d{2}[T_]\d{2}[:\-]\d{2}[:\-]\d{2}[\.\dZ]*(\.[^.]+)$/i,
-      "$1",
-    );
-}
+import { cleanFileName } from "../utils/filename";
 
 interface Hit {
   filepath: string;
@@ -28,7 +16,15 @@ interface Hit {
   assigned_tags?: string[];
   searchable_text?: string;
   formatted_text?: string;
+  formatted_filepath?: string;
+  formatted_tags?: string[];
+  /** Which indexed field the query actually matched, so the UI can show
+   * *something* meaningful even when there's no searchable_text excerpt
+   * (e.g. a hit that only matched on filename or a tag). */
+  matchedIn: "content" | "filename" | "tag" | "other";
 }
+
+const hasHighlight = (s?: string | null) => !!s && s.includes("__HL__");
 
 function renderHighlight(text: string): React.ReactNode[] {
   const parts = text.split(/(__HL__|__\/HL__)/g);
@@ -52,6 +48,35 @@ function renderHighlight(text: string): React.ReactNode[] {
     else nodes.push(part);
   }
   return nodes;
+}
+
+/**
+ * Figures out — and renders — what a hit actually matched on. Meilisearch
+ * only highlights/crops `searchable_text` by default, so a hit that matched
+ * on the filename or a tag instead used to render as a blank, unexplained
+ * card. This checks all three and falls back to an honest "no excerpt"
+ * note rather than silently showing nothing.
+ */
+function matchSnippet(hit: Hit): { node: React.ReactNode; note?: string } {
+  if (hit.matchedIn === "content" && hit.formatted_text) {
+    return { node: renderHighlight(hit.formatted_text) };
+  }
+  if (hit.matchedIn === "filename" && hit.formatted_filepath) {
+    const base =
+      hit.formatted_filepath.split("/").pop() ?? hit.formatted_filepath;
+    return { node: renderHighlight(base), note: "Matched in filename" };
+  }
+  if (hit.matchedIn === "tag" && hit.formatted_tags) {
+    const matched = hit.formatted_tags.filter(hasHighlight);
+    return {
+      node: matched.length ? renderHighlight(matched.join(", ")) : null,
+      note: "Matched tag",
+    };
+  }
+  if (hit.searchable_text) {
+    return { node: hit.searchable_text.slice(0, 320) };
+  }
+  return { node: null, note: "No excerpt available — matched by relevance" };
 }
 
 /* ── grouped hit card ──────────────────────────────────────────────────────── */
@@ -148,11 +173,7 @@ function FileGroup({
       <div style={{ display: "flex", flexDirection: "column" }}>
         {hits.map((hit, i) => {
           const absIdx = baseIndex + i;
-          const snippet = (
-            hit.formatted_text ??
-            hit.searchable_text ??
-            ""
-          ).slice(0, 280);
+          const { node: snippetNode, note: matchNote } = matchSnippet(hit);
           return (
             <div
               key={`${hit.pageIdx}_${i}`}
@@ -190,25 +211,37 @@ function FileGroup({
                 {t.sr_page}
                 {hit.pageIdx + 1}
               </span>
-              {snippet && (
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: "0.72rem",
-                    color: "var(--text-2)",
-                    lineHeight: 1.5,
-                    flex: 1,
-                    minWidth: 0,
-                    wordBreak: "break-word",
-                    display: "-webkit-box",
-                    WebkitBoxOrient: "vertical",
-                    WebkitLineClamp: 2,
-                    overflow: "hidden",
-                  }}
-                >
-                  {renderHighlight(snippet)}
-                </p>
-              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {matchNote && (
+                  <p
+                    style={{
+                      margin: "0 0 1px",
+                      fontSize: "0.6rem",
+                      color: "var(--text-3)",
+                      fontStyle: "italic",
+                    }}
+                  >
+                    {matchNote}
+                  </p>
+                )}
+                {snippetNode && (
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "0.72rem",
+                      color: "var(--text-2)",
+                      lineHeight: 1.5,
+                      wordBreak: "break-word",
+                      display: "-webkit-box",
+                      WebkitBoxOrient: "vertical",
+                      WebkitLineClamp: 2,
+                      overflow: "hidden",
+                    }}
+                  >
+                    {snippetNode}
+                  </p>
+                )}
+              </div>
               <button
                 style={{
                   background: "var(--accent-glow)",
@@ -253,10 +286,7 @@ function FlatHit({
 }) {
   const t = useI18n();
   const [showPath, setShowPath] = useState(false);
-  const snippet = (hit.formatted_text ?? hit.searchable_text ?? "").slice(
-    0,
-    320,
-  );
+  const { node: snippetNode, note: matchNote } = matchSnippet(hit);
   const name = cleanFileName(hit.filepath ?? "");
 
   return (
@@ -408,7 +438,19 @@ function FlatHit({
             {hit.filepath}
           </p>
         )}
-        {snippet && (
+        {matchNote && (
+          <p
+            style={{
+              margin: 0,
+              fontSize: "0.6rem",
+              color: "var(--text-3)",
+              fontStyle: "italic",
+            }}
+          >
+            {matchNote}
+          </p>
+        )}
+        {snippetNode && (
           <p
             style={{
               margin: 0,
@@ -422,7 +464,7 @@ function FlatHit({
               wordBreak: "break-word",
             }}
           >
-            {renderHighlight(snippet)}
+            {snippetNode}
           </p>
         )}
       </div>
@@ -471,7 +513,10 @@ export default function SearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [createdAfter, setCreatedAfter] = useState("");
   const [createdBefore, setCreatedBefore] = useState("");
-  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [sortBy, setSortBy] = useState<
+    "relevance" | "newest" | "oldest" | "biggest" | "smallest"
+  >("relevance");
   const [grouped, setGrouped] = useState(true);
   const apiUrl = useSettingsStore((s) => s.apiUrl);
 
@@ -529,19 +574,39 @@ export default function SearchPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  async function doSearch(q: string, tag?: string | null) {
-    const effective = tag ? `${q} tag:${tag}`.trim() : q.trim();
-    if (!effective && !createdAfter && !createdBefore) return;
+  async function doSearch(
+    q: string,
+    overrides?: {
+      tags?: string[];
+      sort?: typeof sortBy;
+    },
+  ) {
+    const effective = q.trim();
+    const tagsToUse = overrides?.tags ?? selectedTags;
+    const sortToUse = overrides?.sort ?? sortBy;
+    if (
+      !effective &&
+      !createdAfter &&
+      !createdBefore &&
+      tagsToUse.length === 0
+    )
+      return;
     setLoading(true);
     setError(null);
     try {
       const extra: Record<string, string> = {};
       if (createdAfter) extra.created_after = createdAfter;
       if (createdBefore) extra.created_before = createdBefore;
+      if (tagsToUse.length > 0) extra.tags = tagsToUse.join(",");
+      if (sortToUse !== "relevance") extra.sort = sortToUse;
       const res = await searchDocuments(effective, extra);
       setResult(res);
       setParams({ q: effective }, { replace: true });
       pushRecent(effective);
+      // Jump back to the top of the results list for a fresh search.
+      requestAnimationFrame(() => {
+        resultsScrollRef.current?.scrollTo({ top: 0 });
+      });
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -554,7 +619,7 @@ export default function SearchPage() {
   useEffect(() => {
     if (!query.trim() || query.trim().length < 2) return;
     const handle = setTimeout(() => {
-      doSearch(query, activeTag);
+      doSearch(query);
     }, 450);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -573,16 +638,28 @@ export default function SearchPage() {
     ? Object.entries(result.tag_facets).sort((a, b) => b[1] - a[1])
     : [];
 
-  const hits: Hit[] = (result?.hits ?? []).map((h: any) => ({
-    filepath: h.filepath,
-    pageIdx:
-      typeof h.pageIdx === "string" ? parseInt(h.pageIdx, 10) : h.pageIdx,
-    fileId: h.file_id,
-    banner_img: resolveBannerUrl(h.banner_img) ?? undefined,
-    assigned_tags: h.assigned_tags,
-    searchable_text: h.searchable_text,
-    formatted_text: h._formatted?.searchable_text,
-  }));
+  const hits: Hit[] = (result?.hits ?? []).map((h: any) => {
+    const fText: string | undefined = h._formatted?.searchable_text;
+    const fPath: string | undefined = h._formatted?.filepath;
+    const fTags: string[] | undefined = h._formatted?.assigned_tags;
+    let matchedIn: Hit["matchedIn"] = "other";
+    if (hasHighlight(fText)) matchedIn = "content";
+    else if (hasHighlight(fPath)) matchedIn = "filename";
+    else if (fTags?.some(hasHighlight)) matchedIn = "tag";
+    return {
+      filepath: h.filepath,
+      pageIdx:
+        typeof h.pageIdx === "string" ? parseInt(h.pageIdx, 10) : h.pageIdx,
+      fileId: h.file_id,
+      banner_img: resolveBannerUrl(h.banner_img) ?? undefined,
+      assigned_tags: h.assigned_tags,
+      searchable_text: h.searchable_text,
+      formatted_text: fText,
+      formatted_filepath: fPath,
+      formatted_tags: fTags,
+      matchedIn,
+    };
+  });
 
   // Group hits by file
   const groupedHits = useMemo(() => {
@@ -594,6 +671,28 @@ export default function SearchPage() {
     }
     return Array.from(map.entries());
   }, [hits]);
+
+  // ── Virtualization ────────────────────────────────────────────────────
+  // Result lists can easily run into the hundreds of hits across many
+  // files, and rendering every card at once made typing/scrolling janky.
+  // Row heights vary a lot (a grouped file card can have anywhere from 1
+  // to dozens of hit rows), so we measure each rendered row and let the
+  // virtualizer keep its cache in sync via ResizeObserver.
+  const resultsScrollRef = useRef<HTMLDivElement>(null);
+  const rowCount = grouped ? groupedHits.length : hits.length;
+  const rowVirtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => resultsScrollRef.current,
+    estimateSize: (i) => {
+      if (grouped) {
+        const fileHits = groupedHits[i]?.[1]?.length ?? 1;
+        return 58 + fileHits * 52 + 8;
+      }
+      return 96;
+    },
+    overscan: 6,
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
 
   function openHit(hit: Hit, idx: number) {
     nav(
@@ -626,7 +725,6 @@ export default function SearchPage() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              setActiveTag(null);
               doSearch(query);
             }}
             style={{ display: "flex", gap: 7 }}
@@ -781,6 +879,34 @@ export default function SearchPage() {
                 onChange={(e) => setCreatedBefore(e.target.value)}
               />
             </div>
+            {/* Sort */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "flex-end",
+              }}
+            >
+              <label className="label" style={{ marginBottom: 3 }}>
+                Sort
+              </label>
+              <select
+                className="input"
+                value={sortBy}
+                onChange={(e) => {
+                  const next = e.target.value as typeof sortBy;
+                  setSortBy(next);
+                  doSearch(query, { sort: next });
+                }}
+                style={{ fontSize: "0.72rem", padding: "4px 8px" }}
+              >
+                <option value="relevance">Relevance</option>
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="biggest">Biggest first</option>
+                <option value="smallest">Smallest first</option>
+              </select>
+            </div>
             {/* Group toggle */}
             <div
               style={{
@@ -806,7 +932,67 @@ export default function SearchPage() {
             </div>
           </div>
 
-          {/* Result summary */}
+          {/* Selected tag filter chips */}
+          {selectedTags.length > 0 && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                flexWrap: "wrap",
+                marginTop: 8,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "0.63rem",
+                  color: "var(--text-3)",
+                }}
+              >
+                Tags included:
+              </span>
+              {selectedTags.map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() => {
+                    const next = selectedTags.filter((tg) => tg !== tag);
+                    setSelectedTags(next);
+                    doSearch(query, { tags: next });
+                  }}
+                  className="tag"
+                  style={{
+                    fontSize: "0.65rem",
+                    padding: "1px 8px",
+                    cursor: "pointer",
+                    border: "1px solid var(--accent)",
+                    color: "var(--accent)",
+                    background: "var(--accent-glow)",
+                  }}
+                  title="Remove filter"
+                >
+                  {tag} ✕
+                </button>
+              ))}
+              <button
+                onClick={() => {
+                  setSelectedTags([]);
+                  doSearch(query, { tags: [] });
+                }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--text-3)",
+                  fontSize: "0.63rem",
+                  textDecoration: "underline",
+                }}
+              >
+                clear
+              </button>
+            </div>
+          )}
+
+          {/* Result summary + search stats */}
           {result && (
             <div
               style={{
@@ -814,6 +1000,7 @@ export default function SearchPage() {
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
+                flexWrap: "wrap",
               }}
             >
               <p
@@ -824,6 +1011,20 @@ export default function SearchPage() {
                 }}
               >
                 {t.sr_results(hits.length, distinctFiles)}
+                {typeof result.estimatedTotalHits === "number" &&
+                  result.estimatedTotalHits > hits.length && (
+                    <> of {result.estimatedTotalHits} total</>
+                  )}
+                {typeof result.processing_time_ms === "number" && (
+                  <> · {result.processing_time_ms}ms</>
+                )}
+                {result.sort && result.sort !== "relevance" && (
+                  <>
+                    {" "}
+                    · sorted by {result.sort}
+                    {result.sort_applied === false && " (unavailable, showing relevance order)"}
+                  </>
+                )}
                 {result.excludedTerms.length > 0 && (
                   <>
                     {" "}
@@ -880,13 +1081,11 @@ export default function SearchPage() {
 
         {/* Results */}
         <div
+          ref={resultsScrollRef}
           style={{
             flex: 1,
             overflowY: "auto",
             padding: "12px 16px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
           }}
         >
           {!query && !result && !loading && (
@@ -975,6 +1174,7 @@ export default function SearchPage() {
             <div
               style={{
                 padding: "8px 12px",
+                marginBottom: 8,
                 background: "rgba(248,113,113,0.07)",
                 border: "1px solid rgba(248,113,113,0.2)",
                 borderRadius: 7,
@@ -1011,32 +1211,73 @@ export default function SearchPage() {
             </div>
           )}
 
-          {!loading && grouped
-            ? groupedHits.map(([filepath, fileHits], gi) => {
-                const baseIdx = groupedHits
-                  .slice(0, gi)
-                  .reduce((s, [, h]) => s + h.length, 0);
+          {!loading && !error && rowCount > 0 && (
+            <div
+              style={{
+                position: "relative",
+                width: "100%",
+                height: rowVirtualizer.getTotalSize(),
+              }}
+            >
+              {virtualRows.map((vr) => {
+                if (grouped) {
+                  const entry = groupedHits[vr.index];
+                  if (!entry) return null;
+                  const [filepath, fileHits] = entry;
+                  const baseIdx = groupedHits
+                    .slice(0, vr.index)
+                    .reduce((s, [, h]) => s + h.length, 0);
+                  return (
+                    <div
+                      key={vr.key}
+                      data-index={vr.index}
+                      ref={rowVirtualizer.measureElement}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        transform: `translateY(${vr.start}px)`,
+                        paddingBottom: 8,
+                      }}
+                    >
+                      <FileGroup
+                        filepath={filepath}
+                        hits={fileHits}
+                        totalHits={hits.length}
+                        baseIndex={baseIdx}
+                        onJump={(hit, idx) => openHit(hit, idx)}
+                      />
+                    </div>
+                  );
+                }
+                const hit = hits[vr.index];
+                if (!hit) return null;
                 return (
-                  <FileGroup
-                    key={filepath}
-                    filepath={filepath}
-                    hits={fileHits}
-                    totalHits={hits.length}
-                    baseIndex={baseIdx}
-                    onJump={(hit, idx) => openHit(hit, idx)}
-                  />
+                  <div
+                    key={vr.key}
+                    data-index={vr.index}
+                    ref={rowVirtualizer.measureElement}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${vr.start}px)`,
+                      paddingBottom: 8,
+                    }}
+                  >
+                    <FlatHit
+                      hit={hit}
+                      index={vr.index}
+                      totalHits={hits.length}
+                      onJump={() => openHit(hit, vr.index)}
+                    />
+                  </div>
                 );
-              })
-            : !loading &&
-              hits.map((hit, i) => (
-                <FlatHit
-                  key={`${hit.fileId}_${hit.pageIdx}_${i}`}
-                  hit={hit}
-                  index={i}
-                  totalHits={hits.length}
-                  onJump={() => openHit(hit, i)}
-                />
-              ))}
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1054,57 +1295,94 @@ export default function SearchPage() {
             maxHeight: "40vh",
           }}
         >
-          <p className="label" style={{ paddingLeft: 4, marginBottom: 6 }}>
+          <p className="label" style={{ paddingLeft: 4, marginBottom: 2 }}>
             {t.sr_filterByTag}
           </p>
-          {tagFacets.map(([tag, count]) => (
-            <button
-              key={tag}
-              onClick={() => {
-                const n = activeTag === tag ? null : tag;
-                setActiveTag(n);
-                doSearch(query, n);
-              }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                width: "100%",
-                padding: "4px 8px",
-                border: "none",
-                borderRadius: 5,
-                cursor: "pointer",
-                fontSize: "0.77rem",
-                fontWeight: 500,
-                background:
-                  activeTag === tag ? "var(--accent-glow)" : "transparent",
-                color: activeTag === tag ? "var(--accent)" : "var(--text-2)",
-                transition: "background 0.1s",
-                marginBottom: 1,
-              }}
-            >
-              <span
+          <p
+            style={{
+              paddingLeft: 4,
+              margin: "0 0 6px",
+              fontSize: "0.6rem",
+              color: "var(--text-3)",
+            }}
+          >
+            {selectedTags.length === 0
+              ? "All tags included"
+              : `${selectedTags.length} selected`}
+          </p>
+          {tagFacets.map(([tag, count]) => {
+            const checked = selectedTags.includes(tag);
+            return (
+              <button
+                key={tag}
+                onClick={() => {
+                  const next = checked
+                    ? selectedTags.filter((tg) => tg !== tag)
+                    : [...selectedTags, tag];
+                  setSelectedTags(next);
+                  doSearch(query, { tags: next });
+                }}
                 style={{
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  maxWidth: 100,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 6,
+                  width: "100%",
+                  padding: "4px 8px",
+                  border: "none",
+                  borderRadius: 5,
+                  cursor: "pointer",
+                  fontSize: "0.77rem",
+                  fontWeight: 500,
+                  background: checked ? "var(--accent-glow)" : "transparent",
+                  color: checked ? "var(--accent)" : "var(--text-2)",
+                  transition: "background 0.1s",
+                  marginBottom: 1,
                 }}
               >
-                {tag}
-              </span>
-              <span
-                style={{
-                  fontSize: "0.61rem",
-                  color: "var(--text-3)",
-                  flexShrink: 0,
-                  fontFamily: "JetBrains Mono, monospace",
-                }}
-              >
-                {count}
-              </span>
-            </button>
-          ))}
+                <span
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    minWidth: 0,
+                  }}
+                >
+                  <span
+                    aria-hidden
+                    style={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: 3,
+                      flexShrink: 0,
+                      border: `1px solid ${checked ? "var(--accent)" : "var(--border-soft)"}`,
+                      background: checked ? "var(--accent)" : "transparent",
+                    }}
+                  />
+                  <span
+                    style={{
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      maxWidth: 84,
+                    }}
+                  >
+                    {tag}
+                  </span>
+                </span>
+                <span
+                  style={{
+                    fontSize: "0.61rem",
+                    color: "var(--text-3)",
+                    flexShrink: 0,
+                    fontFamily: "JetBrains Mono, monospace",
+                  }}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </aside>
       )}
     </div>

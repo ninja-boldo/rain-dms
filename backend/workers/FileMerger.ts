@@ -38,7 +38,7 @@ export class FileMerger {
     level: "INFO" | "WARN" | "ERROR",
     message: string,
     meta?: Record<string, unknown>,
-    cropToFirst: number | null = null,
+    cropToFirst: number | null = 250,
   ) {
     let metaStringCropped: string | undefined;
 

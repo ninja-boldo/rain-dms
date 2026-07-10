@@ -1,7 +1,12 @@
 import { Pool } from "pg";
-import { statsCountersTable } from "../../db/schema";
+import {
+  documentsTable,
+  pagesTable,
+  statsCountersTable,
+} from "../../db/schema";
 import { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { eq, inArray, sql } from "drizzle-orm";
+import { StatsTableInfo, StatsTableKeys } from "../types/main";
 
 export async function updateStatsTableKey(
   db: NodePgDatabase<Record<string, never>> & { $client: Pool },
@@ -18,16 +23,33 @@ export async function getKeyFromStatsTable(
   db: NodePgDatabase<Record<string, never>> & { $client: Pool },
   tableKey: string,
 ): Promise<number> {
-  const res: {
-    value: number;
-  }[] = await db
+  const res = await db
     .select({ value: statsCountersTable.value })
     .from(statsCountersTable)
     .where(eq(statsCountersTable.key, tableKey));
-  if (res.length === 0) {
-    throw Error("this Key doesnt seem to exist in the table");
+
+  if (res.length > 0) {
+    return res[0].value;
   }
-  return res[0].value;
+
+  const tableInfo = await reseedStatsCounters(db);
+
+  console.warn(
+    `The stats table key '${tableKey}' wasn't found. Reseeding stats table.`,
+  );
+
+  switch (tableKey) {
+    case StatsTableKeys.totalDocuments:
+      return tableInfo.totalDocCount;
+
+    case StatsTableKeys.totalPages:
+      return tableInfo.totalPageCount;
+
+    default:
+      throw new Error(
+        `Couldn't retrieve value (even after reseeding) for key: ${tableKey}`,
+      );
+  }
 }
 
 export async function getKeysFromStatsTable(
@@ -45,4 +67,27 @@ export async function getKeysFromStatsTable(
     if (!(key in out)) throw new Error(`stats key "${key}" does not exist`);
   }
   return out;
+}
+
+export async function reseedStatsCounters(
+  db: NodePgDatabase<Record<string, never>> & { $client: Pool },
+): Promise<StatsTableInfo> {
+  const [{ count: docCount }] = await db
+    .select({ count: sql<number>`count(*)`.mapWith(Number) })
+    .from(documentsTable);
+  const [{ count: pageCount }] = await db
+    .select({ count: sql<number>`count(*)`.mapWith(Number) })
+    .from(pagesTable);
+
+  await db
+    .insert(statsCountersTable)
+    .values([
+      { key: StatsTableKeys.totalDocuments, value: docCount },
+      { key: StatsTableKeys.totalPages, value: pageCount },
+    ])
+    .onConflictDoUpdate({
+      target: statsCountersTable.key,
+      set: { value: sql`excluded.value` },
+    });
+  return { totalPageCount: pageCount, totalDocCount: docCount };
 }

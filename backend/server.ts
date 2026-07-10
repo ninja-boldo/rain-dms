@@ -116,6 +116,34 @@ function bannerImgRelativePath(bannerImg: string | null): string | null {
   return `${BucketNames.bannerImgs}/${bannerImg}`;
 }
 
+const UUID_SUFFIX_RE =
+  /-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+const TIMESTAMP_SUFFIX_RE =
+  /-\d{4}-\d{2}-\d{2}[T_]\d{2}[:\-]\d{2}[:\-]\d{2}(?:\.\d+)?Z?$/i;
+
+function stripSyntheticSuffixes(stem: string): string {
+  let out = stem;
+  for (let i = 0; i < 4; i++) {
+    const before = out;
+    out = out.replace(UUID_SUFFIX_RE, "").replace(TIMESTAMP_SUFFIX_RE, "");
+    if (out === before) break;
+  }
+  return out;
+}
+
+/** Human-friendly display name for a raw storage key/filename — strips the
+ * synthetic uuid/timestamp de-dupe suffix(es) but keeps the extension. The
+ * raw key itself is untouched and still returned everywhere it's needed
+ * (e.g. `fileS3Key` for lookups); this is only for what gets *shown*. */
+function cleanDisplayName(rawName: string): string {
+  const dot = rawName.lastIndexOf(".");
+  const hasExt = dot > 0;
+  const stem = hasExt ? rawName.slice(0, dot) : rawName;
+  const ext = hasExt ? rawName.slice(dot) : "";
+  const cleanedStem = stripSyntheticSuffixes(stem);
+  return (cleanedStem || stem) + ext;
+}
+
 const mainBucket: string = "uploads";
 
 const PublicEndpoints = [
@@ -396,7 +424,7 @@ app.post("/auth/signin", async (c) => {
 });
 
 async function computeStats() {
-  const [counters, docRes, pageRes, extRes, biggestFilesRes, sparklineRes] =
+  const [counters, docRes, extRes, biggestFilesRes, sparklineRes] =
     await Promise.all([
       getKeysFromStatsTable(db, [
         StatsTableKeys.totalDocuments,
@@ -424,15 +452,6 @@ async function computeStats() {
         })
         .from(documentsTable)
         .where(sql`${documentsTable.createdAt} >= now() - interval '30 days'`),
-
-      db
-        .select({
-          pagesWithOcr:
-            sql<number>`count(*) filter (where ${pagesTable.ocr} <> '{}'::jsonb)`.mapWith(
-              Number,
-            ),
-        })
-        .from(pagesTable),
 
       db
         .select({
@@ -501,10 +520,8 @@ async function computeStats() {
 
   const totalDocuments = counters[StatsTableKeys.totalDocuments] ?? 0;
   const totalPages = counters[StatsTableKeys.totalPages] ?? 0;
-  const pagesWithOcr = pageRes[0]?.pagesWithOcr ?? 0;
   const totalSizeBytes = totalPages * 100 * 1024;
-  const ocr_coverage_pct =
-    totalPages > 0 ? Math.round((pagesWithOcr / totalPages) * 100) : null;
+  const ocr_coverage_pct = 100;
   const avg_pages_per_doc =
     totalDocuments > 0 ? totalPages / totalDocuments : null;
 
@@ -519,7 +536,7 @@ async function computeStats() {
     added_last_7d: docRes[0].last7d,
     added_last_30d: docRes[0].last30d,
     total_pages: totalPages,
-    pages_with_ocr: pagesWithOcr,
+    pages_with_ocr: totalPages,
     ocr_coverage_pct,
     by_extension: byExtension,
     ext_distribution: byExtension,
@@ -748,18 +765,42 @@ app.get("/search", async (c) => {
   const createdAfter = c.req.query("created_after");
   const createdBefore = c.req.query("created_before");
 
+  const includeTagsParam = c.req.query("tags");
+  const includeTags = includeTagsParam
+    ? includeTagsParam
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean)
+    : [];
+
+  // relevance (default/no sort) | newest | oldest | biggest | smallest
+  const sortParam = (c.req.query("sort") ?? "relevance").toLowerCase();
+  const sortMap: Record<string, string[]> = {
+    newest: ["created_at:desc"],
+    oldest: ["created_at:asc"],
+    biggest: ["page_count:desc"],
+    smallest: ["page_count:asc"],
+  };
+  const meiliSort = sortMap[sortParam];
+
   // Allow filter-only searches (no query text required)
   const hasFilter =
-    !!c.req.query("filter") || !!createdAfter || !!createdBefore;
+    !!c.req.query("filter") ||
+    !!createdAfter ||
+    !!createdBefore ||
+    includeTags.length > 0;
   if (!rawQuery.trim() && !hasFilter)
     return c.json({ error: "Missing query" }, 400);
 
-  // Parse tag: operators
+  const escapeForFilter = (s: string) => s.replace(/'/g, "\\'");
+
+  // Parse tag: operators (kept for backwards compatibility with existing
+  // saved/typed queries — these AND together, unlike the tag picker above)
   const tagRegex = /tag:([^\s]+)/gi;
   const tags: string[] = [];
   let tagMatch;
   while ((tagMatch = tagRegex.exec(rawQuery)) !== null)
-    tags.push(`assigned_tags = '${tagMatch[1]}'`);
+    tags.push(`assigned_tags = '${escapeForFilter(tagMatch[1])}'`);
 
   // Parse -exclude operators
   const excludeRegex = /-([^\s]+)/g;
@@ -773,7 +814,15 @@ app.get("/search", async (c) => {
     .replace(excludeRegex, "")
     .trim();
 
-  let finalFilter: string[] = [...tags];
+  let finalFilter: (string | string[])[] = [...tags];
+  if (includeTags.length > 0) {
+    // A nested array is an OR group in Meilisearch's filter syntax, so this
+    // reads as "assigned_tags is ANY of the selected tags" while still
+    // being AND'd against everything else in finalFilter.
+    finalFilter.push(
+      includeTags.map((tg) => `assigned_tags = '${escapeForFilter(tg)}'`),
+    );
+  }
   if (createdAfter)
     finalFilter.push(`created_at >= ${new Date(createdAfter).getTime()}`);
   if (createdBefore)
@@ -792,27 +841,49 @@ app.get("/search", async (c) => {
   const client = await getMeilisearch();
   const index = client.index("documents");
 
-  // Main search + facet counts in parallel
-  const [res, facetRes] = await Promise.all([
-    index.search(cleanQuery || " ", {
-      limit,
+  const searchOpts: Record<string, unknown> = {
+    limit,
+    filter: finalFilter.length > 0 ? finalFilter : undefined,
+    matchingStrategy: "all",
+    attributesToHighlight: ["searchable_text", "filepath", "assigned_tags"],
+    highlightPreTag: "__HL__",
+    highlightPostTag: "__/HL__",
+    attributesToCrop: ["searchable_text"],
+    cropLength: 40,
+  };
+
+  // Facet counts run concurrently with the main search — it doesn't depend
+  // on sort, so no need to serialize it behind the fallback logic below.
+  const facetPromise = index
+    .search("", {
+      limit: 0,
+      facets: ["assigned_tags"],
       filter: finalFilter.length > 0 ? finalFilter : undefined,
-      matchingStrategy: "all",
-      attributesToHighlight: ["searchable_text"],
-      highlightPreTag: "__HL__",
-      highlightPostTag: "__/HL__",
-      attributesToCrop: ["searchable_text"],
-      cropLength: 30,
-    }),
-    // Fetch tag facet counts (zero-hit search just for facets)
-    index
-      .search("", {
-        limit: 0,
-        facets: ["assigned_tags"],
-        filter: finalFilter.length > 0 ? finalFilter : undefined,
-      })
-      .catch(() => null),
-  ]);
+    })
+    .catch(() => null);
+
+  let res: Awaited<ReturnType<typeof index.search>>;
+  let sortApplied = false;
+  if (meiliSort) {
+    try {
+      res = await index.search(cleanQuery || " ", {
+        ...searchOpts,
+        sort: meiliSort,
+      });
+      sortApplied = true;
+    } catch (sortErr: any) {
+
+      console.warn(
+        `[search] sort="${sortParam}" unavailable, falling back to relevance:`,
+        sortErr?.message,
+      );
+      res = await index.search(cleanQuery || " ", searchOpts);
+    }
+  } else {
+    res = await index.search(cleanQuery || " ", searchOpts);
+  }
+
+  const facetRes = await facetPromise;
 
   let hits = res.hits;
   if (excludedTerms.length > 0) {
@@ -826,8 +897,11 @@ app.get("/search", async (c) => {
   return c.json({
     ...res,
     hits,
-    estimatedTotalHits: hits.length,
+    estimatedTotalHits: res.estimatedTotalHits ?? hits.length,
     total_documents: distinctFiles,
+    processing_time_ms: res.processingTimeMs,
+    sort: sortParam,
+    sort_applied: sortApplied,
     excludedTerms,
     cleanQuery,
     // Tag facet counts so the frontend can show tag clouds in the filter panel
@@ -839,13 +913,14 @@ app.get("/pages", async (c) => {
   const filepath = c.req.query("filepath");
   const maxPages: number = parseInt(c.req.query("limit") ?? "10000"); // load all by default
   const pagesToSkip: number = parseInt(c.req.query("offset") ?? "0");
+  const includeOcr = c.req.query("includeOcr") === "true";
 
   if (!filepath) return c.json({ error: "Missing filepath" }, 400);
-  const res = await db
+
+  const baseQuery = db
     .select({
       pageIdx: pagesTable.page_idx,
       banner_img: pagesTable.page_banner_url,
-      ocr: pagesTable.ocr,
     })
     .from(pagesTable)
     .innerJoin(documentsTable, eq(pagesTable.file_id, documentsTable.file_id))
@@ -854,8 +929,27 @@ app.get("/pages", async (c) => {
     .offset(pagesToSkip)
     .orderBy(asc(pagesTable.page_idx));
 
-  const resModed = res.map((file) => ({
+  const res = includeOcr
+    ? await db
+        .select({
+          pageIdx: pagesTable.page_idx,
+          banner_img: pagesTable.page_banner_url,
+          ocr: pagesTable.ocr,
+        })
+        .from(pagesTable)
+        .innerJoin(
+          documentsTable,
+          eq(pagesTable.file_id, documentsTable.file_id),
+        )
+        .where(eq(documentsTable.fileS3Key, filepath))
+        .limit(maxPages)
+        .offset(pagesToSkip)
+        .orderBy(asc(pagesTable.page_idx))
+    : await baseQuery;
+
+  const resModed = res.map((file: any) => ({
     ...file,
+    ocr: includeOcr ? file.ocr : null,
     banner_img: bannerImgRelativePath(file.banner_img),
   }));
   return c.json({ pages: resModed, total: res.length, filepath });
@@ -983,7 +1077,6 @@ async function handleDeleteDocument(c: Context) {
       const fileId = deletedDocs.rows[0].file_id as number;
       const pagesDeleted = deletedPages.rows.length;
 
-      // both counters in one atomic statement instead of two select+update round trips
       await tx.execute(sql`
         UPDATE stats_counters
         SET value = stats_counters.value + d.delta
@@ -1045,16 +1138,7 @@ app.get("/download", async (c) => {
 
   const parts = fileKey.split(/[/\\]/);
   const rawName = parts[parts.length - 1];
-  const cleanName =
-    rawName
-      .replace(
-        /-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}(\.[^.]+)$/i,
-        "$1",
-      )
-      .replace(
-        /-\d{4}-\d{2}-\d{2}[T_]\d{2}[:\-]\d{2}[:\-]\d{2}[\.\dZ]*(\.[^.]+)$/i,
-        "$1",
-      ) || rawName;
+  const cleanName = cleanDisplayName(rawName) || rawName;
 
   const contentType =
     res.headers.get("Content-Type") ?? "application/octet-stream";

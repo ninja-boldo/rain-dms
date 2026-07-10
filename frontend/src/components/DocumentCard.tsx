@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { Document } from "../api/client";
 import AuthImage from "./AuthImage";
 import { useI18n } from "../i18n";
+import { cleanFileName } from "../utils/filename";
 
 interface Props {
   doc: Document;
@@ -12,20 +13,6 @@ function ext(key: string): string {
   if (!key) return "?";
   const parts = key.split(".");
   return parts.length > 1 ? parts[parts.length - 1].toUpperCase() : "?";
-}
-
-function cleanFileName(key: string): string {
-  if (!key) return "Unknown";
-  const base = key.split("/").pop() ?? key;
-  return base
-    .replace(
-      /-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}(\.[^.]+)$/i,
-      "$1",
-    )
-    .replace(
-      /-\d{4}-\d{2}-\d{2}[T_]\d{2}[:\-]\d{2}[:\-]\d{2}[\.\dZ]*(\.[^.]+)$/i,
-      "$1",
-    );
 }
 
 function relTime(iso: string): string {
@@ -42,7 +29,7 @@ export default function DocumentCard({ doc }: Props) {
   const nav = useNavigate();
   const [showPath, setShowPath] = useState(false);
   const e = ext(doc.fileS3Key ?? "");
-  const name = cleanFileName(doc.fileS3Key ?? "");
+  const name = cleanFileName(doc.fileS3Key ?? "") || "Unknown";
 
   if (!doc.fileS3Key) return null;
 
@@ -57,7 +44,7 @@ export default function DocumentCard({ doc }: Props) {
       {/* Banner */}
       <div
         style={{
-          height: 130,
+          height: 150,
           overflow: "hidden",
           borderRadius: "9px 9px 0 0",
           background: "var(--bg-raised)",

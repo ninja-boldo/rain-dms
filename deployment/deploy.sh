@@ -7,7 +7,9 @@ ARCH=$(dpkg --print-architecture)
 
 echo "[1/5] Installing dependencies..."
 sudo apt update
-sudo apt install -y git openssl libnss3-tools ansible jq
+sudo apt install -y git openssl libnss3-tools ansible jq chrony
+
+sudo systemctl enable --now chrony # for time syncing enabled
 
 if kubectl version --client; then
   echo "kubectl already installed"

@@ -115,6 +115,11 @@ export const StatsTableKeys = {
   totalPages: "pages_known_to_system",
   totalDocuments: "files_known_to_system",
 };
+
+export interface StatsTableInfo {
+  totalDocCount: number;
+  totalPageCount: number;
+}
 export interface RawBlockNormalized {
   text: string;
   confidence: number;

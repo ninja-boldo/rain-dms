@@ -161,6 +161,8 @@ export default function SettingsPage() {
   const setAllowedUploadExtensions = useSettingsStore(
     (s) => s.setAllowedUploadExtensions,
   );
+  const loadOcrByDefault = useSettingsStore((s) => s.loadOcrByDefault);
+  const setLoadOcrByDefault = useSettingsStore((s) => s.setLoadOcrByDefault);
   const t = useI18n();
 
   const username = useAuthStore((s) => s.username);
@@ -592,6 +594,16 @@ export default function SettingsPage() {
             </p>
           )}
         </div>
+      </Section>
+
+      <Section title="Document viewer">
+        <Row
+          label="Load OCR by default"
+          sub="On: full OCR text/bounding boxes fetch as soon as a document opens (needed for instant search-hit jumping, but can be slow on very long documents). Off: pages load instantly and OCR is fetched lazily as you scroll, or on demand via the OCR button in a document."
+          last
+        >
+          <Toggle value={loadOcrByDefault} onChange={setLoadOcrByDefault} />
+        </Row>
       </Section>
 
       {/* Connection */}

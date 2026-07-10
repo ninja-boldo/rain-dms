@@ -17,6 +17,17 @@ fi
 sudo apt update
 sudo apt install iptables -y
 
+curl -sfL https://get.k3s.io | sh - # install k3s-server if not yet happened
+
+# set config explicitly as this wasnt done automatic 
+# last time i tried (10.7.26)
+mkdir -p ~/.kube
+sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+sudo chown -R "$USER:$USER" ~/.kube
+chmod 600 ~/.kube/config
+
+
+
 cd docker/certs
 chmod +x update_kubectl_secrets.sh
 ./update_kubectl_secrets.sh

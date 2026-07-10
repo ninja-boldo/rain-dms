@@ -20,6 +20,7 @@ import { useAuthStore } from "../store/auth";
 import { useSettingsStore } from "../store/settings";
 import { useI18n } from "../i18n";
 import { reportSuccess } from "../store/toast";
+import { cleanFileName } from "../utils/filename";
 
 interface FlatBox {
   text: string;
@@ -66,19 +67,6 @@ function boxOcrToFlat(box: BoxOcr): FlatBox {
   };
 }
 
-function cleanFileName(key: string): string {
-  if (!key) return "Unknown";
-  const base = key.split("/").pop() ?? key;
-  return base
-    .replace(
-      /-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}(\.[^.]+)$/i,
-      "$1",
-    )
-    .replace(
-      /-\d{4}-\d{2}-\d{2}[T_]\d{2}[:\-]\d{2}[:\-]\d{2}[\.\dZ]*(\.[^.]+)$/i,
-      "$1",
-    );
-}
 
 function tokenizeQuery(q: string): string[] {
   return (q || "")
@@ -98,6 +86,13 @@ export default function DocumentPage() {
   const targetPageIdx = parseInt(searchParams.get("page") ?? "", 10) || 0;
   const query = searchParams.get("q") ?? "";
   const nav = useNavigate();
+  const loadOcrByDefault = useSettingsStore((s) => s.loadOcrByDefault);
+  // Arriving from a search hit needs every page's OCR up front so all
+  // matches across the document can be located and jumped to. Otherwise we
+  // honor the "load OCR by default" setting: fetch nothing eagerly and pull
+  // OCR in lazily, page by page, only for what's actually scrolled into
+  // view (or once the person switches the OCR overlay on manually).
+  const eagerOcr = loadOcrByDefault || !!query;
   const [doc, setDoc] = useState<Document | null>(null);
   const [pages, setPages] = useState<Page[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,7 +100,7 @@ export default function DocumentPage() {
   const [deleting, setDeleting] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const [showFullPath, setShowFullPath] = useState(false);
-  const [showOcr, setShowOcr] = useState(true);
+  const [showOcr, setShowOcr] = useState(eagerOcr);
   const [markersMode, setMarkersMode] = useState<"view" | "draw">("view");
   const [noteMarkerKey, setNoteMarkerKey] = useState<string | null>(null);
   const [pageWidth, setPageWidth] = useState(800);
@@ -114,6 +109,8 @@ export default function DocumentPage() {
   const [viewportH, setViewportH] = useState(800);
   const scrollRef = useRef<HTMLDivElement>(null);
   const queryTokens = useMemo(() => tokenizeQuery(query), [query]);
+  const loadedOcrPages = useRef<Set<number>>(new Set());
+  const ocrFetchInFlight = useRef<Set<number>>(new Set());
 
   const { markers, setMarkers } = useLocalStore(filepath);
 
@@ -123,14 +120,57 @@ export default function DocumentPage() {
       return;
     }
     setLoading(true);
-    Promise.all([getDocument(filepath), getPages(filepath)])
+    loadedOcrPages.current = new Set();
+    ocrFetchInFlight.current = new Set();
+    setShowOcr(eagerOcr);
+    // Fast path: page list + banner images only. OCR JSON (which can be
+    // sizeable across a long document) is only requested up front when
+    // `eagerOcr` is true — otherwise it's fetched lazily below.
+    Promise.all([
+      getDocument(filepath),
+      getPages(filepath, { includeOcr: eagerOcr }),
+    ])
       .then(([d, p]) => {
         setDoc(d);
         setPages(p.pages);
+        if (eagerOcr) {
+          loadedOcrPages.current = new Set(p.pages.map((pg) => pg.pageIdx));
+        }
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filepath, nav]);
+
+  /** Fetch OCR for a single page (by its position in `pages`) on demand. */
+  function ensureOcrLoaded(idx: number) {
+    if (loadedOcrPages.current.has(idx) || ocrFetchInFlight.current.has(idx))
+      return;
+    const target = pages[idx];
+    if (!target) return;
+    ocrFetchInFlight.current.add(idx);
+    getPages(filepath, {
+      offset: target.pageIdx,
+      limit: 1,
+      includeOcr: true,
+    })
+      .then((res) => {
+        const fetched = res.pages[0];
+        loadedOcrPages.current.add(idx);
+        if (!fetched) return;
+        setPages((prev) =>
+          prev.map((pg, i) => (i === idx ? { ...pg, ocr: fetched.ocr } : pg)),
+        );
+      })
+      .catch(() => {
+        // Swallow — the page image itself already loaded fine; the OCR
+        // overlay just won't have data for this one page.
+      })
+      .finally(() => {
+        ocrFetchInFlight.current.delete(idx);
+      });
+  }
+
 
   function toggleBoxMarker(
     boxIndex: number,
@@ -209,7 +249,7 @@ export default function DocumentPage() {
     }
   }
 
-  const displayName = cleanFileName(doc?.fileS3Key ?? "");
+  const displayName = cleanFileName(doc?.fileS3Key ?? "") || "Unknown";
   const encryptedFileKey = (doc as any)?.encrypted_file_key as
     | string
     | undefined;
@@ -277,6 +317,18 @@ export default function DocumentPage() {
   );
 
   const totalHeight = pages.length === 0 ? 0 : pages.length * rowHeight + 40;
+
+  // Lazily fetch OCR for whatever's currently in the visible (+overscan)
+  // range, but only once OCR is actually wanted — either the overlay is
+  // toggled on, or the whole document was fetched eagerly already (in
+  // which case every page is marked loaded and this is a no-op).
+  useEffect(() => {
+    if (!showOcr || pages.length === 0) return;
+    for (let i = firstVisible; i <= lastVisible; i++) {
+      ensureOcrLoaded(i);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstVisible, lastVisible, showOcr, pages.length, filepath]);
 
   function onScroll(e: React.UIEvent<HTMLDivElement>) {
     setScrollTop(e.currentTarget.scrollTop);
@@ -624,11 +676,16 @@ export default function DocumentPage() {
               </button>
             </div>
           )}
-          {totalOcrBoxes > 0 && (
+          {pages.length > 0 && (
             <button
               className={`btn ${showOcr ? "btn-primary" : "btn-ghost"}`}
               onClick={() => setShowOcr((v) => !v)}
               style={{ fontSize: "0.72rem" }}
+              title={
+                showOcr
+                  ? t.doc_ocrBoxes
+                  : "Load and show OCR text boxes for visible pages"
+              }
             >
               OCR
             </button>

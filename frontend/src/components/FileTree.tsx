@@ -5,6 +5,7 @@ import type { Document } from "../api/client";
 import { deleteDocument } from "../api/client";
 import { reportSuccess } from "../store/toast";
 import { useI18n } from "../i18n";
+import { cleanFileName } from "../utils/filename";
 
 export type FileTreeSortKey =
   | "alpha"
@@ -95,18 +96,6 @@ function buildTagTree(docs: Document[], simPaths: string[]): TreeNode {
 }
 
 /* ── helpers ────────────────────────────────────────────────────────────────── */
-
-function cleanFileName(name: string): string {
-  return name
-    .replace(
-      /-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}(\.[^.]+)$/i,
-      "$1",
-    )
-    .replace(
-      /-\d{4}-\d{2}-\d{2}[T_]\d{2}[:\-]\d{2}[:\-]\d{2}[\.\dZ]*(\.[^.]+)$/i,
-      "$1",
-    );
-}
 
 function compareBySort(a: Document, b: Document, key: FileTreeSortKey): number {
   switch (key) {

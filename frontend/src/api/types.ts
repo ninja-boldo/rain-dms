@@ -74,11 +74,20 @@ export interface MainPageResponse {
 
 export interface SearchResponse {
   hits: any[];
+  /** True total matches for the query+filters on the server, independent of
+   * how many were actually returned (capped by `limit`). */
   estimatedTotalHits: number;
   total_documents: number;
   tag_facets: Record<string, number>;
   excludedTerms: string[];
   cleanQuery: string;
+  /** Server-side search time reported by Meilisearch, in milliseconds. */
+  processing_time_ms?: number;
+  sort?: string;
+  /** False if a sort was requested but the index doesn't have that
+   * attribute registered as sortable yet, in which case relevance order
+   * was used instead. */
+  sort_applied?: boolean;
 }
 
 export interface TagEntry {

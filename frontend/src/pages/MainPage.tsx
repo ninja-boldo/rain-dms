@@ -15,27 +15,15 @@ import { useSettingsStore } from "../store/settings";
 import { useUploadStore } from "../store/uploads";
 import { reportSuccess } from "../store/toast";
 import { useI18n } from "../i18n";
+import { cleanFileName as cleanName } from "../utils/filename";
 
-const CARD_MIN = 188;
-const GAP = 13;
-const ROW_HEIGHT = 215;
+const CARD_MIN = 220;
+const GAP = 14;
+const ROW_HEIGHT = 238;
 const ROW_OVERSCAN = 4;
 
 type ViewMode = "grid" | "tree";
 type SortKey = "date_desc" | "date_asc" | "name_asc" | "pages_desc";
-
-function cleanName(key: string) {
-  const b = key?.split("/").pop() ?? key ?? "";
-  return b
-    .replace(
-      /-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}(\.[^.]+)$/i,
-      "$1",
-    )
-    .replace(
-      /-\d{4}-\d{2}-\d{2}[T_]\d{2}[:\-]\d{2}[:\-]\d{2}[\.\dZ]*(\.[^.]+)$/i,
-      "$1",
-    );
-}
 
 function sortDocs(docs: Document[], sort: SortKey): Document[] {
   const d = [...docs];
