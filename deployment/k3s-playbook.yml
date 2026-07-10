@@ -20,6 +20,34 @@
           - iptables
           - curl
 
+    
+    - name: Install systemd-timesyncd
+      ansible.builtin.apt:
+        name: systemd-timesyncd
+        state: present
+        update_cache: true
+      become: true
+
+    - name: Enable systemd-timesyncd
+      ansible.builtin.systemd:
+        name: systemd-timesyncd
+        enabled: true
+        state: started
+      become: true
+
+    - name: Enable NTP time synchronization
+      ansible.builtin.command: timedatectl set-ntp true
+      become: true
+
+    - name: Check time synchronization status
+      ansible.builtin.command: timedatectl status
+      become: true
+      register: timedatectl_status
+
+    - name: Show time synchronization status
+      ansible.builtin.debug:
+        var: timedatectl_status.stdout_lines
+
     - name: add custom root ca
       ansible.builtin.copy:
         src: "../docker/certs/rootCA.pem"
@@ -284,6 +312,34 @@
         state: present
         update_cache: true
 
+
+    - name: Install systemd-timesyncd
+      ansible.builtin.apt:
+        name: systemd-timesyncd
+        state: present
+        update_cache: true
+      become: true
+
+    - name: Enable systemd-timesyncd
+      ansible.builtin.systemd:
+        name: systemd-timesyncd
+        enabled: true
+        state: started
+      become: true
+
+    - name: Enable NTP time synchronization
+      ansible.builtin.command: timedatectl set-ntp true
+      become: true
+
+    - name: Check time synchronization status
+      ansible.builtin.command: timedatectl status
+      become: true
+      register: timedatectl_status
+
+    - name: Show time synchronization status
+      ansible.builtin.debug:
+        var: timedatectl_status.stdout_lines
+        
     - name: Wait for orchestrator API to become reachable
       ansible.builtin.wait_for:
         host: "{{ hostvars[master_host].orchestrator_ip }}"
