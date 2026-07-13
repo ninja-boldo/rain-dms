@@ -122,13 +122,15 @@ export class FileMerger {
     }
     const tags: string[] = generateTags(
       res.originalConsumePath,
-      process.env.CONSUME_PATH ?? "",
+      process.env.CONSUME_PATH ?? "/consume",
     );
     const dbRes = await this.db
       .select({ userId: usersTable.id })
       .from(usersTable)
       .where(eq(usersTable.username, res.username));
+      
     const user_id = dbRes.length > 0 ? dbRes[0].userId : null;
+    console.log(`trying to add with user id: ${user_id} and for username: ${res.username}`)
 
     const _: { key: string }[] = await this.db
       .select({ key: fileKeyTempTable.encryptionKey })
@@ -146,12 +148,12 @@ export class FileMerger {
         createdAt: currentDate,
         assigned_tags: tags,
         fileHash: file.fileHash,
-        spawnedInPipelineIso: res.spawnedTime,
+        spawnedInPipelineIso: new Date(res.spawnedTime),
         encryption_key: encKey,
         pageCount: file.pages.length,
         extension:
           path.extname(file.originalFilePath) !== ""
-            ? path.extname(file.originalFilePath)
+            ? path.extname(file.originalFilePath).replace(".", "")
             : "unknown",
       })
       .onConflictDoNothing()

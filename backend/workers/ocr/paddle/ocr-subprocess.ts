@@ -5,10 +5,17 @@ const imgPaths: string[] = JSON.parse(process.argv[2]);
 const workerIdx: number = Number(process.argv[3]);
 const outFile: string = process.argv[4];
 const threadsPerProcess: number = Number(process.argv[5]);
+
+const modelUsed: Readonly<{
+  detection: string;
+  recognition: string;
+  charactersDictionary: string;
+}> = process.argv[6] ? JSON.parse(process.argv[6]) : V6_TINY_MODEL;
+
 const verbose: boolean = false;
 
 const svc = new PaddleOcrService({
-  model: V6_TINY_MODEL,
+  model: modelUsed,
   debugging: { debug: false, verbose: false },
   session: {
     executionProviders: ["cpu"],

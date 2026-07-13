@@ -20,7 +20,6 @@
           - iptables
           - curl
 
-    
     - name: Install systemd-timesyncd
       ansible.builtin.apt:
         name: systemd-timesyncd
@@ -312,7 +311,6 @@
         state: present
         update_cache: true
 
-
     - name: Install systemd-timesyncd
       ansible.builtin.apt:
         name: systemd-timesyncd
@@ -339,7 +337,7 @@
     - name: Show time synchronization status
       ansible.builtin.debug:
         var: timedatectl_status.stdout_lines
-        
+
     - name: Wait for orchestrator API to become reachable
       ansible.builtin.wait_for:
         host: "{{ hostvars[master_host].orchestrator_ip }}"

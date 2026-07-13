@@ -67,13 +67,17 @@ export class FileProcessor {
 
   private readonly docLimit = pLimit(1);
 
-  async init(tempFolder: string): Promise<void> {
+  async init(
+    tempFolder: string,
+    localDevMode: boolean = false,
+    verbose: boolean = false,
+  ): Promise<void> {
     this.tempFolder = tempFolder;
     await fs.mkdir(tempFolder, { recursive: true });
 
     this.s3 = await getS3Client();
     this.queue = await QueueHandler.create(process.env.AMQP_URL);
-    this.paddle = new PaddleJsOcr(tempFolder);
+    this.paddle = new PaddleJsOcr(tempFolder, localDevMode, verbose);
     await this.paddle.init();
 
     this.ready = true;

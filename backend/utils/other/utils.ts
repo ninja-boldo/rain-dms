@@ -28,9 +28,12 @@ const ALLOWED_MIME = [
 export function mockS3Objs(elementCount: number): S3ReturnObj[] {
   const objs: S3ReturnObj[] = [];
   for (let i = 0; i < elementCount; i++) {
-    objs.push({ s3Key: "asante", spawnedTimeIso: "karibo" });
+    objs.push(mockS3Obj());
   }
   return objs;
+}
+export function mockS3Obj(): S3ReturnObj {
+  return { s3Key: "asante", spawnedTimeIso: "karibo" };
 }
 
 export function detectOS(): OsType {
@@ -204,7 +207,7 @@ export async function handleUpload(
 }
 
 export function getConsumePath(): string {
-  const defaultPath: string = "/tmp/rain_dms/consume";
+  const defaultPath: string = "/consume";
   const envVar: string | undefined = process.env.CONSUME_PATH;
   if (envVar === undefined) {
     console.warn(

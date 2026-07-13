@@ -38,7 +38,10 @@ function truncateToByteBudget(name: string, budget: number): string {
   return out;
 }
 
-export async function formatFilename(finalPath: string, tempFolder: string): Promise<string> {
+export async function formatFilename(
+  finalPath: string,
+  tempFolder: string,
+): Promise<string> {
   const ext = path.extname(finalPath);
   const base = path.basename(finalPath, ext);
   const uuid = uuidv4();
@@ -109,21 +112,28 @@ export function sanitizeS3Key(key: string, maxLen = 255): string {
     .normalize("NFC")
     .replace(/[^\p{L}\p{N}._\-\/]/gu, "_");
 
-  return sanitized
+  return sanitized;
 }
-
 
 export const isFilepath = (s: string) => !s.startsWith("http");
 
-export function getUsernameFromConsumeRaw(filePath: string): string {
-  // for each user upload there will be a subfolder for uploads where they can place their stuff
-  const consumePath: string | undefined = process.env.CONSUME_PATH;
-  if (consumePath === undefined) {
+export function getUsernameFromConsumeRaw(
+  filePath: string,
+  consumePath: string | null,
+): string {
+    // for each user upload there will be a subfolder for uploads where they can place their stuff
+
+  const consumePathLocal: string = consumePath ?? process.env.CONSUME_PATH ?? "/consume";
+
+  if (consumePathLocal === undefined) {
     throw Error("CONSUME_PATH doesnt seem to be loaded/set as an env var");
   }
 
-  filePath = removePathPrefix(filePath, consumePath); // remove consumePath from filepath
-  return filePath.trim().length > 0 ? path.parse(filePath).root : ""; // return the first root folder after consume
+  filePath = removePathPrefix(filePath, consumePathLocal);
+
+  const parts = filePath.split(path.sep).filter(Boolean);
+
+  return parts.length > 0 ? parts[0] : "";
 }
 
 export function removePathPrefix(filePath: string, prefix: string): string {
@@ -136,7 +146,8 @@ export function removePathPrefix(filePath: string, prefix: string): string {
 export async function getUsernameFromConsumeDbChecked(
   username: string,
 ): Promise<string> {
-  const allegedUsername: string = getUsernameFromConsumeRaw(username);
+  const allegedUsername: string = getUsernameFromConsumeRaw(username, null);
+  console.log("alleged username: ", allegedUsername)
   if (USERS_REGISTERED.includes(allegedUsername)) {
     return allegedUsername;
   }

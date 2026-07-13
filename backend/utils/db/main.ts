@@ -63,9 +63,34 @@ export async function getKeysFromStatsTable(
 
   const out: Record<string, number> = {};
   for (const row of res) out[row.key] = row.value;
-  for (const key of tableKeys) {
-    if (!(key in out)) throw new Error(`stats key "${key}" does not exist`);
+
+  const missingKeys = tableKeys.filter((key) => !(key in out));
+
+  if (missingKeys.length > 0) {
+    const tableInfo = await reseedStatsCounters(db);
+
+    console.warn(
+      `The stats table key(s) '${missingKeys.join(", ")}' weren't found. Reseeding stats table.`,
+    );
+
+    for (const key of missingKeys) {
+      switch (key) {
+        case StatsTableKeys.totalDocuments:
+          out[key] = tableInfo.totalDocCount;
+          break;
+
+        case StatsTableKeys.totalPages:
+          out[key] = tableInfo.totalPageCount;
+          break;
+
+        default:
+          throw new Error(
+            `Couldn't retrieve value (even after reseeding) for key: ${key}`,
+          );
+      }
+    }
   }
+
   return out;
 }
 

@@ -9,6 +9,9 @@ import {
   getIsDebugAuthEnabled,
 } from "./envHelpers";
 import { ApiPaths } from "../types/main";
+import type { Context } from "hono";
+
+type BlankEnv = Record<string, any>;
 
 export async function isValidAuthUser(
   db: NodePgDatabase,
@@ -115,13 +118,13 @@ export async function isValidAuthWorker(
 export async function isValidAuth(
   db: NodePgDatabase,
   tokenToVerify: string,
-  username: string | undefined,
+  username: string | null,
 ) {
   if ((await isValidAuthWorker(tokenToVerify)) === true) {
     return true;
   }
 
-  if (username === undefined) {
+  if (username === null) {
     return false;
   }
   if ((await isValidAuthUser(db, tokenToVerify, username)) === true) {
@@ -155,9 +158,9 @@ export const usernameExistsServer = async (
   const cleanHash = String(username).trim();
 
   const result = await db
-    .select({ id: documentsTable.file_id })
-    .from(documentsTable)
-    .where(eq(documentsTable.fileHash, cleanHash))
+    .select({ id: usersTable.username })
+    .from(usersTable)
+    .where(eq(usersTable.username, username))
     .limit(1);
 
   return result.length > 0;
@@ -182,6 +185,39 @@ export async function checkUserIsExisting(username: string): Promise<boolean> {
     throw Error(`failed for this url: ${url} and with this error: ${error}`);
   }
 }
+
+export function getAuthTokenFromReq(c: Context<BlankEnv, "*", any>): string {
+  let token = c.req.header("X-Auth-Token") ?? c.req.header("Authorization");
+
+  if (!token) {
+    throw Error("couldnt find a valid auth header");
+  }
+
+  token = token.replace(/^bearer\s+/i, "");
+  return token;
+}
+
+export function getUsernameFromReq(
+  c: Context<BlankEnv, "*", any>,
+): string | null {
+  const username = c.req.header("X-Username") ?? c.req.header("username");
+  return username === undefined ? null : username;
+}
+
+export function getUserIdFromAuthToken(token: string): number {
+  const payload = jwt.decode(token) as {
+    role: string;
+    userId: string;
+  };
+
+  return parseInt(payload.userId);
+}
+
+export function getUserIdFromReq(c: Context<BlankEnv, "*", any>): number {
+  const token: string = getAuthTokenFromReq(c);
+  return getUserIdFromAuthToken(token);
+}
+
 let _cachedToken: string | null = null;
 let _tokenExpiresAt = 0;
 

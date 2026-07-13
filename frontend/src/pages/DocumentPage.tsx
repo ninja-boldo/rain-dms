@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useLayoutEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   buildDownloadUrl,
   deleteDocument,
+  fetchBinary,
   getDocument,
+  getMainPage,
   getPages,
+  getTags,
 } from "../api/client";
 import type {
   Document,
@@ -13,14 +16,22 @@ import type {
   LineOcr,
   BoxOcr,
   RawBlockNormalized,
+  TagEntry,
 } from "../api/client";
 import AuthImage from "../components/AuthImage";
 import { useLocalStore, type LocalMarker } from "../store/localData";
 import { useAuthStore } from "../store/auth";
 import { useSettingsStore } from "../store/settings";
 import { useI18n } from "../i18n";
-import { reportSuccess } from "../store/toast";
-import { cleanFileName } from "../utils/filename";
+import { reportError, reportSuccess } from "../store/toast";
+import { decryptBlob, decryptFileKey } from "../utils/crypto";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import DocumentCard from "../components/DocumentCard";
+import FileTree from "../components/FileTree";
+import { useUploadStore } from "../store/uploads";
+import { cleanFileName as cleanName } from "../utils/filename";
+
+
 
 interface FlatBox {
   text: string;
@@ -67,7 +78,6 @@ function boxOcrToFlat(box: BoxOcr): FlatBox {
   };
 }
 
-
 function tokenizeQuery(q: string): string[] {
   return (q || "")
     .replace(/tag:\S+/g, "")
@@ -79,795 +89,836 @@ function tokenizeQuery(q: string): string[] {
 const GAP = 16;
 const OVERSCAN = 2;
 
-export default function DocumentPage() {
+// Order used for the Prev/Next "browse other files" controls — same
+// newest-first order as the Documents tab. Cached at module scope for a
+// short window so stepping through files doesn't re-fetch on every click;
+// refreshed if it goes stale or the current file isn't found in it.
+const SIBLING_LIMIT = 500;
+const SIBLING_TTL_MS = 60_000;
+let siblingCache: { keys: string[]; ts: number } | null = null;
+async function getSiblingKeys(currentFilepath: string): Promise<string[]> {
+  const fresh = siblingCache && Date.now() - siblingCache.ts < SIBLING_TTL_MS;
+  if (fresh && siblingCache!.keys.includes(currentFilepath)) {
+    return siblingCache!.keys;
+  }
+  const { data } = await getMainPage(0, SIBLING_LIMIT);
+  const keys = data.map((d) => d.fileS3Key);
+  siblingCache = { keys, ts: Date.now() };
+  return keys;
+}
+
+
+const CARD_MIN = 220;
+const ROW_HEIGHT = 238;
+const ROW_OVERSCAN = 4;
+
+type ViewMode = "grid" | "tree";
+// Keys match the backend's /main_page `sort` param exactly (see MAIN_PAGE_SORT_COLUMNS
+// in index.ts) — sorting happens in the database now, across the *whole* collection,
+// not just whatever page(s) happen to already be loaded client-side.
+type SortKey = "date_desc" | "date_asc" | "name_asc" | "pages_desc";
+
+const PAGE_SIZE = 100;
+
+export default function MainPage() {
   const t = useI18n();
-  const [searchParams] = useSearchParams();
-  const filepath = searchParams.get("filepath") ?? "";
-  const targetPageIdx = parseInt(searchParams.get("page") ?? "", 10) || 0;
-  const query = searchParams.get("q") ?? "";
-  const nav = useNavigate();
-  const loadOcrByDefault = useSettingsStore((s) => s.loadOcrByDefault);
-  // Arriving from a search hit needs every page's OCR up front so all
-  // matches across the document can be located and jumped to. Otherwise we
-  // honor the "load OCR by default" setting: fetch nothing eagerly and pull
-  // OCR in lazily, page by page, only for what's actually scrolled into
-  // view (or once the person switches the OCR overlay on manually).
-  const eagerOcr = loadOcrByDefault || !!query;
-  const [doc, setDoc] = useState<Document | null>(null);
-  const [pages, setPages] = useState<Page[]>([]);
+  const [docs, setDocs] = useState<Document[]>([]);
+  const [total, setTotal] = useState(0);
+  const [nextPageIdx, setNextPageIdx] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [tags, setTags] = useState<TagEntry[]>([]);
+  const [activeTag, setActiveTag] = useState<string | undefined>();
+  const [view, setView] = useState<ViewMode>("grid");
+  const [sort, setSort] = useState<SortKey>("date_desc");
+  const [fileFilter, setFileFilter] = useState("");
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Bulk delete
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkMode, setBulkMode] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [confirmDel, setConfirmDel] = useState(false);
-  const [showFullPath, setShowFullPath] = useState(false);
-  const [showOcr, setShowOcr] = useState(eagerOcr);
-  const [markersMode, setMarkersMode] = useState<"view" | "draw">("view");
-  const [noteMarkerKey, setNoteMarkerKey] = useState<string | null>(null);
-  const [pageWidth, setPageWidth] = useState(800);
-  const [visibleIdx, setVisibleIdx] = useState(0);
-  const [scrollTop, setScrollTop] = useState(0);
-  const [viewportH, setViewportH] = useState(800);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const queryTokens = useMemo(() => tokenizeQuery(query), [query]);
-  const loadedOcrPages = useRef<Set<number>>(new Set());
-  const ocrFetchInFlight = useRef<Set<number>>(new Set());
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
 
-  const { markers, setMarkers } = useLocalStore(filepath);
+  const simulatedTagPaths = useSettingsStore((s) => s.simulatedTagPaths);
+  // Re-fetch when uploads complete
+  const lastCompletedAt = useUploadStore((s) => s.lastCompletedAt);
 
-  useEffect(() => {
-    if (!filepath) {
-      nav("/", { replace: true });
-      return;
-    }
+  const loadingRef = useRef(false);
+
+  // Reset and fetch page 0 whenever the tag filter or sort changes, or an upload finishes.
+  const load = useCallback(async () => {
     setLoading(true);
-    loadedOcrPages.current = new Set();
-    ocrFetchInFlight.current = new Set();
-    setShowOcr(eagerOcr);
-    // Fast path: page list + banner images only. OCR JSON (which can be
-    // sizeable across a long document) is only requested up front when
-    // `eagerOcr` is true — otherwise it's fetched lazily below.
-    Promise.all([
-      getDocument(filepath),
-      getPages(filepath, { includeOcr: eagerOcr }),
-    ])
-      .then(([d, p]) => {
-        setDoc(d);
-        setPages(p.pages);
-        if (eagerOcr) {
-          loadedOcrPages.current = new Set(p.pages.map((pg) => pg.pageIdx));
-        }
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filepath, nav]);
-
-  /** Fetch OCR for a single page (by its position in `pages`) on demand. */
-  function ensureOcrLoaded(idx: number) {
-    if (loadedOcrPages.current.has(idx) || ocrFetchInFlight.current.has(idx))
-      return;
-    const target = pages[idx];
-    if (!target) return;
-    ocrFetchInFlight.current.add(idx);
-    getPages(filepath, {
-      offset: target.pageIdx,
-      limit: 1,
-      includeOcr: true,
-    })
-      .then((res) => {
-        const fetched = res.pages[0];
-        loadedOcrPages.current.add(idx);
-        if (!fetched) return;
-        setPages((prev) =>
-          prev.map((pg, i) => (i === idx ? { ...pg, ocr: fetched.ocr } : pg)),
-        );
-      })
-      .catch(() => {
-        // Swallow — the page image itself already loaded fine; the OCR
-        // overlay just won't have data for this one page.
-      })
-      .finally(() => {
-        ocrFetchInFlight.current.delete(idx);
-      });
-  }
-
-
-  function toggleBoxMarker(
-    boxIndex: number,
-    bbox: { x: number; y: number; w: number; h: number },
-    pageIdx: number,
-  ) {
-    if (!filepath) return;
-    const boxKey = `ocr_${pageIdx}_${boxIndex}`;
-    const existing = markers.find((m) => m.box_key === boxKey);
-    if (existing) {
-      setMarkers((prev) => prev.filter((m) => m.box_key !== boxKey));
-      if (noteMarkerKey === boxKey) setNoteMarkerKey(null);
-      return;
-    }
-    const created: LocalMarker = {
-      box_key: boxKey,
-      page_idx: pageIdx,
-      kind: "ocr",
-      x: bbox.x,
-      y: bbox.y,
-      w: bbox.w,
-      h: bbox.h,
-      note: null,
-      created_at: new Date().toISOString(),
-    };
-    setMarkers((prev) => [...prev, created]);
-    setNoteMarkerKey(boxKey);
-  }
-
-  function addDrawnMarker(
-    pageIdx: number,
-    bbox: { x: number; y: number; w: number; h: number },
-    note?: string,
-  ) {
-    if (!filepath) return;
-    const created: LocalMarker = {
-      box_key: `drawn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      page_idx: pageIdx,
-      kind: "drawn",
-      x: bbox.x,
-      y: bbox.y,
-      w: bbox.w,
-      h: bbox.h,
-      note: note ?? null,
-      created_at: new Date().toISOString(),
-    };
-    setMarkers((prev) => [...prev, created]);
-    setNoteMarkerKey(created.box_key);
-  }
-
-  function updateMarkerNote(boxKey: string, note: string) {
-    setMarkers((prev) =>
-      prev.map((m) => (m.box_key === boxKey ? { ...m, note } : m)),
-    );
-  }
-
-  function removeMarkerByKey(boxKey: string) {
-    setMarkers((prev) => prev.filter((m) => m.box_key !== boxKey));
-    if (noteMarkerKey === boxKey) setNoteMarkerKey(null);
-  }
-
-  async function handleDelete() {
-    if (!confirmDel) {
-      setConfirmDel(true);
-      return;
-    }
-    setDeleting(true);
+    setError(null);
+    loadingRef.current = true;
     try {
-      await deleteDocument(filepath);
-      reportSuccess(t.toast_success, displayName);
-      nav("/", { replace: true });
+      const res = await getMainPage(0, PAGE_SIZE, activeTag);
+      setDocs(res.data);
+      setTotal(res.totalCount);
+      setNextPageIdx(1);
+      setHasMore(res.data.length < res.totalCount);
     } catch (e: any) {
       setError(e.message);
-      setDeleting(false);
-      setConfirmDel(false);
+    } finally {
+      setLoading(false);
+      loadingRef.current = false;
     }
-  }
+  }, [activeTag, sort]);
 
-  const displayName = cleanFileName(doc?.fileS3Key ?? "") || "Unknown";
-  const encryptedFileKey = (doc as any)?.encrypted_file_key as
-    | string
-    | undefined;
-
-  const pageData = useMemo(
-    () => pages.map((p) => ({ page: p, boxes: flattenOcr(p.ocr) })),
-    [pages],
-  );
-
-  const totalOcrBoxes = useMemo(
-    () => pageData.reduce((sum, p) => sum + p.boxes.length, 0),
-    [pageData],
-  );
-
-  const allMatches = useMemo(() => {
-    const list: { pageIdx: number; boxIdx: number; text: string }[] = [];
-    pageData.forEach(({ boxes }, pIdx) => {
-      boxes.forEach((b, bIdx) => {
-        if (queryTokens.some((t) => (b.text ?? "").toLowerCase().includes(t))) {
-          list.push({ pageIdx: pIdx, boxIdx: bIdx, text: b.text });
-        }
+  // Infinite scroll — fetch the next chunk (in the current sort order) and append.
+  const loadMore = useCallback(async () => {
+    if (loadingRef.current || !hasMore) return;
+    loadingRef.current = true;
+    setLoadingMore(true);
+    try {
+      const res = await getMainPage(nextPageIdx, PAGE_SIZE, activeTag);
+      setDocs((prev) => {
+        const seen = new Set(prev.map((d) => d.fileS3Key));
+        return [...prev, ...res.data.filter((d) => !seen.has(d.fileS3Key))];
       });
-    });
-    return list;
-  }, [pageData, queryTokens]);
+      setTotal(res.totalCount);
+      setNextPageIdx((i) => i + 1);
+      setHasMore(
+        (nextPageIdx + 1) * PAGE_SIZE < res.totalCount && res.data.length > 0,
+      );
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoadingMore(false);
+      loadingRef.current = false;
+    }
+  }, [nextPageIdx, hasMore, activeTag, sort]);
 
-  const [activeGlobalMatch, setActiveGlobalMatch] = useState(0);
   useEffect(() => {
-    setActiveGlobalMatch(0);
-  }, [filepath]);
+    load();
+  }, [load, lastCompletedAt]);
+  useEffect(() => {
+    getTags()
+      .then((r) => setTags(r.tags.slice(0, 80)))
+      .catch(() => {});
+  }, []);
 
-  // ResizeObserver on scroll container → page width & viewport height
+  // Tree view needs the *complete* document set to build an accurate folder
+  // hierarchy — a partial page would silently hide whole subfolders. Rather
+  // than paginate it, keep pulling subsequent chunks in the background until
+  // everything is loaded, independent of scroll position.
   useEffect(() => {
+    if (view !== "tree" || !hasMore || loading) return;
+    const id = setTimeout(() => loadMore(), 60);
+    return () => clearTimeout(id);
+  }, [view, hasMore, loading, docs.length, loadMore]);
+
+  // Infinite-scroll sentinel for grid/list views.
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (view === "tree") return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) loadMore();
+      },
+      { rootMargin: "600px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [view, loadMore]);
+
+  // ── Virtualization ─────────────────────────────────────────────────────
+  // Track the scroll container's width so we can derive the column count
+  // and re-flow the grid responsively (same minmax(188, 1fr) sizing as the
+  // original CSS grid, just measured in JS).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const update = () => {
-      const cw = el.clientWidth;
-      const narrow = cw < 480;
-      const margin = narrow ? 12 : 48;
-      const floor = narrow ? 200 : 360;
-      const w = Math.max(floor, Math.min(cw - margin, 1100));
-      setPageWidth(w);
-      setViewportH(el.clientHeight);
-    };
-    update();
-    const ro = new ResizeObserver(update);
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 0;
+      setContainerWidth(w);
+    });
     ro.observe(el);
+    setContainerWidth(el.clientWidth);
     return () => ro.disconnect();
   }, []);
 
-  // Estimate aspect ratio from the first page's natural size; fallback to A4
-  const [aspectRatio, setAspectRatio] = useState(0.707);
-
-  const pageHeight = pageWidth / aspectRatio;
-  const rowHeight = pageHeight + GAP;
-
-  // Determine which pages should be mounted
-  const firstVisible = Math.max(
-    0,
-    Math.floor(scrollTop / rowHeight) - OVERSCAN,
-  );
-  const lastVisible = Math.min(
-    pages.length - 1,
-    Math.ceil((scrollTop + viewportH) / rowHeight) + OVERSCAN,
-  );
-
-  const totalHeight = pages.length === 0 ? 0 : pages.length * rowHeight + 40;
-
-  // Lazily fetch OCR for whatever's currently in the visible (+overscan)
-  // range, but only once OCR is actually wanted — either the overlay is
-  // toggled on, or the whole document was fetched eagerly already (in
-  // which case every page is marked loaded and this is a no-op).
-  useEffect(() => {
-    if (!showOcr || pages.length === 0) return;
-    for (let i = firstVisible; i <= lastVisible; i++) {
-      ensureOcrLoaded(i);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firstVisible, lastVisible, showOcr, pages.length, filepath]);
-
-  function onScroll(e: React.UIEvent<HTMLDivElement>) {
-    setScrollTop(e.currentTarget.scrollTop);
-    // Find page index closest to top of viewport
-    const idx = Math.min(
-      pages.length - 1,
-      Math.max(0, Math.floor(e.currentTarget.scrollTop / rowHeight)),
+  const filtered = docs.filter((d) => {
+    if (!fileFilter) return true;
+    const f = fileFilter.toLowerCase();
+    return (
+      cleanName(d.fileS3Key).toLowerCase().includes(f) ||
+      d.fileS3Key.toLowerCase().includes(f)
     );
-    setVisibleIdx(idx);
-  }
+  });
 
-  function scrollToPage(idx: number) {
-    const top = idx * rowHeight;
-    if (scrollRef.current) {
-      scrollRef.current.scrollTo({ top, behavior: "smooth" });
-    }
-  }
+  const columns = useMemo(() => {
+    if (containerWidth <= 0) return 1;
+    const inner = containerWidth - 28; // 14px padding each side
+    // Floor so we never promise a column that doesn't fully fit
+    return Math.max(1, Math.floor((inner + GAP) / (CARD_MIN + GAP)));
+  }, [containerWidth]);
 
-  // When arriving via search (?q=) without an explicit page, jump to the
-  // first page that contains a match.
-  const initialScrollPage = useMemo(() => {
-    if (!query || targetPageIdx > 0) return targetPageIdx;
-    const first = allMatches[0]?.pageIdx;
-    return first ?? 0;
-  }, [query, targetPageIdx, allMatches]);
+  const rowCount = useMemo(
+    () => Math.ceil(filtered.length / columns),
+    [filtered.length, columns],
+  );
 
-  // After data loads, jump to target page
-  useEffect(() => {
-    if (loading || pages.length === 0) return;
-    const id = requestAnimationFrame(() => {
-      scrollToPage(Math.min(initialScrollPage, pages.length - 1));
+  const virtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: ROW_OVERSCAN,
+  });
+
+  const virtualRows = virtualizer.getVirtualItems();
+
+  function toggleSelect(key: string) {
+    setSelected((s) => {
+      const n = new Set(s);
+      n.has(key) ? n.delete(key) : n.add(key);
+      return n;
     });
-    return () => cancelAnimationFrame(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, pages.length, initialScrollPage]);
-
-  // Scroll to active match — to the page, then to the specific box within it
-  useEffect(() => {
-    if (allMatches.length === 0) return;
-    const m = allMatches[activeGlobalMatch];
-    if (!m) return;
-    const pageTop = m.pageIdx * rowHeight;
-    if (!scrollRef.current) return;
-    scrollRef.current.scrollTo({ top: pageTop, behavior: "smooth" });
-    // After page scroll settles, scroll to the specific box element
-    const tid = setTimeout(() => {
-      const boxEl = scrollRef.current?.querySelector(
-        "[data-active-box='true']",
-      ) as HTMLElement | null;
-      if (boxEl) {
-        boxEl.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-          inline: "nearest",
-        });
-      }
-    }, 320);
-    return () => clearTimeout(tid);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeGlobalMatch, allMatches.length]);
-
-  const activeBoxByPage = useMemo(() => {
-    const m = new Map<number, number>();
-    const cur = allMatches[activeGlobalMatch];
-    if (cur) m.set(cur.pageIdx, cur.boxIdx);
-    return m;
-  }, [allMatches, activeGlobalMatch]);
-
-  const hitNav = queryTokens.length > 0 && allMatches.length > 0;
-  const [hitDismissed, setHitDismissed] = useState(false);
-  // Reset dismissed when match set changes (new search)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const prevMatchLen = useRef(0);
-  if (prevMatchLen.current !== allMatches.length) {
-    prevMatchLen.current = allMatches.length;
-    if (hitDismissed) setHitDismissed(false);
+  }
+  function selectAll() {
+    setSelected(new Set(filtered.map((d) => d.fileS3Key)));
+  }
+  function clearSelection() {
+    setSelected(new Set());
+    setBulkMode(false);
+    setDeleteConfirm(false);
   }
 
-  if (loading)
-    return (
-      <Centered>
-        <p style={{ color: "var(--text-3)", fontSize: "0.85rem" }}>
-          {t.doc_loading}
-        </p>
-      </Centered>
-    );
-  if (error || !doc)
-    return (
-      <div style={{ padding: 24 }}>
-        <p style={{ color: "var(--danger)", fontSize: "0.85rem" }}>
-          {error ?? t.doc_notFound}
-        </p>
-        <button
-          className="btn btn-ghost"
-          onClick={() => nav(-1)}
-          style={{ marginTop: 8 }}
-        >
-          {t.doc_back}
-        </button>
-      </div>
-    );
+  async function bulkDelete() {
+    if (!deleteConfirm) {
+      setDeleteConfirm(true);
+      return;
+    }
+    setDeleting(true);
+    const keys = [...selected];
+    let ok = 0;
+    for (const key of keys) {
+      try {
+        await deleteDocument(key);
+        ok++;
+      } catch {
+        /* apiFetch already surfaced a toast with the real error */
+      }
+    }
+    setDeleting(false);
+    clearSelection();
+    load();
+    if (ok > 0) reportSuccess(t.toast_success, `${ok}/${keys.length}`);
+  }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        overflow: "hidden",
-      }}
-    >
-      {/* Toolbar */}
+    <div className="split-panel" style={{ height: "100%" }}>
+      {/* Tag sidebar */}
+      {tags.length > 0 && (
+        <aside
+          className="split-secondary"
+          style={{
+            width: 176,
+            flexShrink: 0,
+            borderRight: "1px solid var(--border)",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            background: "var(--bg-surface)",
+            maxHeight: "34vh",
+          }}
+        >
+          <div
+            style={{
+              padding: "10px 8px 6px",
+              borderBottom: "1px solid var(--border-soft)",
+              flexShrink: 0,
+            }}
+          >
+            <p className="label" style={{ paddingLeft: 4 }}>
+              {t.main_tags}
+            </p>
+          </div>
+          <div style={{ overflowY: "auto", flex: 1, padding: "4px 6px 8px" }}>
+            <TagBtn
+              label={t.main_all}
+              count={total}
+              active={!activeTag}
+              onClick={() => setActiveTag(undefined)}
+            />
+            {tags.map((tag) => (
+              <TagBtn
+                key={tag.tag}
+                label={tag.tag}
+                count={tag.doc_count}
+                active={activeTag === tag.tag}
+                onClick={() => setActiveTag(tag.tag)}
+              />
+            ))}
+          </div>
+        </aside>
+      )}
+
+      {/* Main */}
       <div
+        className="split-primary"
         style={{
-          padding: "8px 12px",
-          borderBottom: "1px solid var(--border)",
           display: "flex",
-          alignItems: "center",
-          gap: 7,
-          flexShrink: 0,
-          flexWrap: "wrap",
-          background: "var(--bg-surface)",
+          flexDirection: "column",
+          overflow: "hidden",
         }}
       >
-        <button
-          className="btn btn-ghost"
-          onClick={() => nav(-1)}
-          style={{ padding: "3px 8px", fontSize: "0.78rem" }}
+        {/* Toolbar */}
+        <div
+          style={{
+            padding: "8px 14px",
+            borderBottom: "1px solid var(--border)",
+            display: "flex",
+            alignItems: "center",
+            gap: 7,
+            flexShrink: 0,
+            background: "var(--bg-surface)",
+            flexWrap: "wrap",
+          }}
         >
-          {t.doc_back}
-        </button>
-        <div style={{ flex: 1, overflow: "hidden", minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <p
-              className="mono"
+          <div>
+            <h2
               style={{
                 margin: 0,
-                fontSize: "0.76rem",
+                fontSize: "0.87rem",
+                fontWeight: 600,
                 color: "var(--text-1)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
               }}
-              title={doc.fileS3Key}
             >
-              {displayName}
+              {activeTag ? (
+                <>
+                  <span style={{ color: "var(--text-3)", fontWeight: 400 }}>
+                    {t.main_tagLabel}{" "}
+                  </span>
+                  <span className="tag">{activeTag}</span>
+                </>
+              ) : (
+                t.main_allDocuments
+              )}
+            </h2>
+            <p
+              style={{ margin: 0, fontSize: "0.66rem", color: "var(--text-3)" }}
+            >
+              {t.main_documents(total)}
             </p>
-            <button
-              title={showFullPath ? t.doc_hidePath : t.doc_showPath}
-              aria-label={showFullPath ? t.doc_hidePath : t.doc_showPath}
-              onClick={() => setShowFullPath((v) => !v)}
-              style={{
-                background: "rgba(0,0,0,0.5)",
-                border: "none",
-                cursor: "pointer",
-                color: "var(--text-1)",
-                fontSize: "0.72rem",
-                padding: "2px 6px",
-                borderRadius: 4,
-                flexShrink: 0,
-                lineHeight: 1,
-              }}
-            >
-              ⓘ
-            </button>
           </div>
-          {showFullPath && (
-            <div
-              style={{
-                margin: "2px 0 0",
-                fontSize: "0.62rem",
-                color: "var(--text-2)",
-                background: "var(--bg-raised)",
-                padding: "5px 7px",
-                borderRadius: 4,
-                display: "flex",
-                flexDirection: "column",
-                gap: 2,
-              }}
-            >
-              <button
-                onClick={() => {
-                  navigator.clipboard?.writeText(doc.fileS3Key).catch(() => {});
-                  reportSuccess(t.toast_success, doc.fileS3Key);
-                }}
-                title={doc.fileS3Key}
-                className="mono"
+
+          {/* Bulk mode toggle */}
+          <button
+            onClick={() => {
+              setBulkMode((v) => !v);
+              clearSelection();
+            }}
+            style={{
+              ...toolBtn,
+              background: bulkMode ? "var(--accent-glow)" : undefined,
+              color: bulkMode ? "var(--accent)" : "var(--text-2)",
+              borderColor: bulkMode ? "var(--accent)" : undefined,
+            }}
+            title={t.main_select}
+          >
+            ☑ {t.main_select}
+          </button>
+
+          {/* Bulk actions */}
+          {bulkMode && selected.size > 0 && (
+            <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+              <span
                 style={{
-                  background: "none",
-                  border: "none",
-                  padding: 0,
-                  margin: 0,
-                  cursor: "pointer",
+                  fontSize: "0.73rem",
                   color: "var(--text-2)",
-                  fontSize: "0.62rem",
-                  textAlign: "left",
-                  wordBreak: "break-all",
+                  fontFamily: "JetBrains Mono, monospace",
                 }}
               >
-                {doc.fileS3Key} ⧉
-              </button>
-              <span style={{ fontFamily: "JetBrains Mono, monospace" }}>
-                {t.doc_ingested}:{" "}
-                {doc.created_at
-                  ? new Date(doc.created_at).toLocaleString()
-                  : "—"}
-                {(doc as any).spawned_time && (
-                  <>
-                    {" · "}
-                    {t.doc_pipeline}:{" "}
-                    {new Date((doc as any).spawned_time).toLocaleString()}
-                  </>
-                )}
+                {t.main_selected(selected.size)}
               </span>
-              {doc.file_id != null && (
-                <span style={{ fontFamily: "JetBrains Mono, monospace" }}>
-                  {t.doc_fileId}: {String(doc.file_id)}
-                </span>
+              <button onClick={selectAll} style={toolBtn}>
+                {t.main_allOnPage(filtered.length)}
+              </button>
+              <button onClick={clearSelection} style={toolBtn}>
+                {t.main_none}
+              </button>
+              <button
+                onClick={bulkDelete}
+                disabled={deleting}
+                style={{
+                  ...toolBtn,
+                  background: deleteConfirm
+                    ? "rgba(248,113,113,0.15)"
+                    : undefined,
+                  color: "var(--danger)",
+                  borderColor: "rgba(248,113,113,0.35)",
+                }}
+              >
+                {deleting
+                  ? t.main_deleting
+                  : deleteConfirm
+                    ? t.ft_confirmDelete(selected.size)
+                    : `✗ ${t.ft_delete(selected.size)}`}
+              </button>
+              {deleteConfirm && (
+                <button onClick={() => setDeleteConfirm(false)} style={toolBtn}>
+                  {t.main_cancel}
+                </button>
               )}
             </div>
           )}
-          {query && (
-            <p
+
+          {/* Filename filter */}
+          <div style={{ position: "relative", marginLeft: "auto" }}>
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--text-3)"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
               style={{
-                margin: "2px 0 0",
-                fontSize: "0.66rem",
-                color: "var(--accent)",
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
+                position: "absolute",
+                left: 7,
+                top: "50%",
+                transform: "translateY(-50%)",
+                pointerEvents: "none",
               }}
             >
-              <span
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              value={fileFilter}
+              onChange={(e) => setFileFilter(e.target.value)}
+              placeholder={t.main_filterByFilename}
+              className="input"
+              style={{ paddingLeft: 26, width: 175, fontSize: "0.77rem" }}
+            />
+            {fileFilter && (
+              <button
+                onClick={() => setFileFilter("")}
                 style={{
-                  fontFamily: "JetBrains Mono, monospace",
-                  background: "var(--accent-glow)",
-                  padding: "1px 6px",
-                  borderRadius: 3,
-                  fontWeight: 600,
+                  position: "absolute",
+                  right: 5,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--text-3)",
+                  fontSize: "0.7rem",
                 }}
-              >
-                “{query}”
-              </span>
-              <span>{t.doc_matches(allMatches.length)}</span>
-            </p>
-          )}
-          <p style={{ margin: 0, fontSize: "0.64rem", color: "var(--text-3)" }}>
-            {t.doc_page(visibleIdx + 1, pages.length)}
-            {doc.assigned_tags?.length
-              ? " · " + doc.assigned_tags.join(", ")
-              : ""}
-            {totalOcrBoxes > 0 && ` · ${totalOcrBoxes} ${t.doc_ocrBoxes}`}
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
-          {hitNav && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "stretch",
-                gap: 0,
-                background: "var(--accent-glow)",
-                border:
-                  "1.5px solid color-mix(in srgb, var(--accent) 70%, transparent)",
-                borderRadius: 7,
-                overflow: "hidden",
-                boxShadow:
-                  "0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent)",
-                animation: hitDismissed
-                  ? "none"
-                  : "ocr-blink-border 1.4s ease-in-out 3, hit-pill-persist 1.8s ease-in-out 1.4s infinite",
-              }}
-            >
-              <button
-                onClick={() =>
-                  setActiveGlobalMatch(
-                    (i) => (i - 1 + allMatches.length) % allMatches.length,
-                  )
-                }
-                style={hitBtnStyle}
-                title={t.doc_prevHit}
-                aria-label={t.doc_prevHit}
-              >
-                ↑
-              </button>
-              <button
-                onClick={() => {
-                  setActiveGlobalMatch(0);
-                  const m = allMatches[0];
-                  if (m && scrollRef.current) {
-                    scrollRef.current.scrollTo({
-                      top: m.pageIdx * rowHeight,
-                      behavior: "smooth",
-                    });
-                  }
-                }}
-                title={t.doc_jumpFirst}
-                aria-label={t.doc_jumpFirst}
-                style={{
-                  ...hitBtnStyle,
-                  padding: "3px 9px",
-                  fontSize: "0.72rem",
-                  fontFamily: "JetBrains Mono, monospace",
-                  fontWeight: 700,
-                  letterSpacing: "0.04em",
-                  borderLeft:
-                    "1px solid color-mix(in srgb, var(--accent) 35%, transparent)",
-                  borderRight:
-                    "1px solid color-mix(in srgb, var(--accent) 35%, transparent)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 5,
-                }}
-              >
-                <span style={{ fontSize: "0.78rem" }}>●</span>
-                <span>
-                  HIT&nbsp;
-                  {activeGlobalMatch + 1}/{allMatches.length}
-                </span>
-              </button>
-              <button
-                onClick={() =>
-                  setActiveGlobalMatch((i) => (i + 1) % allMatches.length)
-                }
-                style={hitBtnStyle}
-                title={t.doc_nextHit}
-                aria-label={t.doc_nextHit}
-              >
-                ↓
-              </button>
-              <button
-                onClick={() => setHitDismissed(true)}
-                style={{
-                  ...hitBtnStyle,
-                  fontSize: "0.62rem",
-                  padding: "2px 6px",
-                  borderLeft:
-                    "1px solid color-mix(in srgb, var(--accent) 25%, transparent)",
-                  opacity: 0.6,
-                }}
-                title={t.doc_dismiss}
-                aria-label="Dismiss"
               >
                 ✕
               </button>
-            </div>
-          )}
-          {pages.length > 0 && (
-            <button
-              className={`btn ${showOcr ? "btn-primary" : "btn-ghost"}`}
-              onClick={() => setShowOcr((v) => !v)}
-              style={{ fontSize: "0.72rem" }}
-              title={
-                showOcr
-                  ? t.doc_ocrBoxes
-                  : "Load and show OCR text boxes for visible pages"
-              }
-            >
-              OCR
-            </button>
-          )}
-          <button
-            className={`btn ${markersMode !== "view" ? "btn-primary" : "btn-ghost"}`}
-            onClick={() =>
-              setMarkersMode((m) => (m === "draw" ? "view" : "draw"))
-            }
-            style={{ fontSize: "0.72rem" }}
-            title={
-              markersMode === "draw" ? t.doc_markModeHint : t.doc_markModeHint2
-            }
-          >
-            {markersMode === "draw" ? t.doc_drawing : t.doc_mark}
-          </button>
-          {markers.length > 0 && (
-            <span
-              style={{
-                fontSize: "0.68rem",
-                color: "var(--warn)",
-                fontFamily: "JetBrains Mono, monospace",
-                background: "var(--bg-raised)",
-                padding: "2px 7px",
-                borderRadius: 4,
-              }}
-            >
-              {t.doc_marker(markers.length)}
-            </span>
-          )}
-          <a
-            href={buildDownloadUrl(doc.fileS3Key)}
-            download
-            className="btn btn-ghost"
-            style={{ fontSize: "0.72rem", textDecoration: "none" }}
-          >
-            ↓
-          </a>
-          <button
-            className="btn btn-danger"
-            onClick={handleDelete}
-            disabled={deleting}
-            style={{ fontSize: "0.72rem" }}
-          >
-            {deleting ? "…" : confirmDel ? t.doc_confirmDelete : t.doc_delete}
-          </button>
-          {confirmDel && !deleting && (
-            <button
-              className="btn btn-ghost"
-              onClick={() => setConfirmDel(false)}
-              style={{ fontSize: "0.72rem" }}
-            >
-              ✕
-            </button>
-          )}
-        </div>
-      </div>
+            )}
+          </div>
 
-      {/* Page jump bar */}
-      {pages.length > 1 && (
-        <div
-          style={{
-            padding: "5px 12px",
-            borderBottom: "1px solid var(--border-soft)",
-            display: "flex",
-            gap: 4,
-            alignItems: "center",
-            flexShrink: 0,
-            background: "var(--bg-surface)",
-            overflowX: "auto",
-          }}
-        >
-          <span
+          {/* Sort */}
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortKey)}
             style={{
-              fontSize: "0.65rem",
-              color: "var(--text-3)",
-              flexShrink: 0,
-              marginRight: 4,
-              letterSpacing: "0.05em",
-              textTransform: "uppercase",
+              background: "var(--bg-raised)",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              color: "var(--text-2)",
+              fontSize: "0.77rem",
+              padding: "4px 8px",
+              outline: "none",
+              cursor: "pointer",
             }}
           >
-            pages
-          </span>
-          {pages.map((p, i) => (
-            <button
-              key={p.pageIdx}
-              onClick={() => scrollToPage(i)}
+            <option value="date_desc">{t.main_newestFirst}</option>
+            <option value="date_asc">{t.main_oldestFirst}</option>
+            <option value="name_asc">{t.main_nameAZ}</option>
+            <option value="pages_desc">{t.main_mostPages}</option>
+          </select>
+
+          {/* View toggle */}
+          <div
+            style={{
+              display: "flex",
+              background: "var(--bg-raised)",
+              border: "1px solid var(--border)",
+              borderRadius: 5,
+              overflow: "hidden",
+            }}
+          >
+            <VBtn
+              active={view === "grid"}
+              onClick={() => setView("grid")}
+              title={t.main_grid}
+            >
+              <GridIco />
+            </VBtn>
+            <VBtn
+              active={view === "tree"}
+              onClick={() => setView("tree")}
+              title={t.main_tree}
+            >
+              <TreeIco />
+            </VBtn>
+          </div>
+          <button
+            className="btn btn-ghost"
+            onClick={load}
+            style={{ padding: "4px 8px" }}
+            title={t.main_refresh}
+            disabled={loading}
+          >
+            <RefreshIco spin={loading} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div
+          ref={view === "tree" ? null : scrollRef}
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            padding: view === "tree" ? 0 : "14px",
+          }}
+        >
+          {error && (
+            <div
               style={{
-                padding: "2px 7px",
-                borderRadius: 4,
-                fontSize: "0.68rem",
-                background:
-                  visibleIdx === i ? "var(--accent-glow)" : "var(--bg-raised)",
-                border: `1px solid ${
-                  visibleIdx === i ? "var(--accent)" : "var(--border)"
-                }`,
-                color: visibleIdx === i ? "var(--accent)" : "var(--text-2)",
-                cursor: "pointer",
-                flexShrink: 0,
+                margin: "0 14px 12px",
+                padding: "9px 13px",
+                background: "rgba(248,113,113,0.07)",
+                border: "1px solid rgba(248,113,113,0.2)",
+                borderRadius: 7,
+                color: "var(--danger)",
+                fontSize: "0.8rem",
               }}
             >
-              {p.pageIdx + 1}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Virtualized scroller */}
-      <div
-        ref={scrollRef}
-        onScroll={onScroll}
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          position: "relative",
-        }}
-      >
-        <div style={{ height: totalHeight, position: "relative" }}>
-          {pageData.length === 0 && (
-            <Centered>
-              <p style={{ color: "var(--text-3)" }}>{t.doc_noPages}</p>
-            </Centered>
+              {error}
+            </div>
           )}
-          {pageData.map(({ page, boxes }, i) => {
-            const isVisible = i >= firstVisible && i <= lastVisible;
-            const top = i * rowHeight + 20;
-            if (!isVisible) {
-              return (
-                <div
-                  key={page.pageIdx}
-                  id={`page-${i}`}
-                  style={{
-                    position: "absolute",
-                    top,
-                    left: 0,
-                    right: 0,
-                    height: pageHeight,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "var(--text-3)",
-                    fontSize: "0.7rem",
-                    fontFamily: "JetBrains Mono, monospace",
-                  }}
-                >
-                  page {page.pageIdx + 1}
-                </div>
-              );
-            }
-            return (
-              <PageBlock
-                key={page.pageIdx}
-                page={page}
-                boxes={boxes}
-                showOcr={showOcr}
-                markersMode={markersMode}
-                markers={markers.filter((m) => m.page_idx === i)}
-                encryptedFileKey={encryptedFileKey}
-                width={pageWidth}
-                height={pageHeight}
-                index={i}
-                highlightTokens={queryTokens}
-                activeHighlightIdx={activeBoxByPage.get(i)}
-                onAspectRatio={(w, h) => {
-                  if (w && h && i === 0) setAspectRatio(w / h);
+          {!loading && filtered.length === 0 && !error && (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "60px 24px",
+                color: "var(--text-3)",
+              }}
+            >
+              <p style={{ fontSize: "0.85rem" }}>
+                {fileFilter ? t.main_noMatch(fileFilter) : t.main_noDocuments}
+              </p>
+            </div>
+          )}
+          {view === "grid" ? (
+            loading ? (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: `repeat(${Math.max(1, columns)}, 1fr)`,
+                  gap: GAP,
                 }}
-                top={top}
-                onToggleBoxMarker={(boxIdx, bbox) =>
-                  toggleBoxMarker(boxIdx, bbox, i)
-                }
-                onAddDrawnMarker={(bbox) => addDrawnMarker(i, bbox)}
-                onRemoveMarker={(boxKey) => removeMarkerByKey(boxKey)}
-                noteMarkerKey={noteMarkerKey}
-                onSaveNote={(boxKey, note) => updateMarkerNote(boxKey, note)}
-                onCloseNote={() => setNoteMarkerKey(null)}
-              />
-            );
-          })}
+              >
+                {Array.from({
+                  length: Math.max(1, columns) * 2,
+                }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="card"
+                    style={{
+                      height: ROW_HEIGHT - 30,
+                      animation: "pulse 1.5s ease-in-out infinite",
+                    }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div
+                style={{
+                  height: virtualizer.getTotalSize(),
+                  position: "relative",
+                  width: "100%",
+                }}
+              >
+                {virtualRows.map((vr) => {
+                  const start = vr.index * columns;
+                  const rowDocs = filtered.slice(start, start + columns);
+                  return (
+                    <div
+                      key={vr.key}
+                      data-index={vr.index}
+                      style={{
+                        position: "absolute",
+                        top: vr.start,
+                        left: 0,
+                        right: 0,
+                        height: vr.size,
+                        display: "grid",
+                        gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                        gap: GAP,
+                      }}
+                    >
+                      {rowDocs.map((d) => (
+                        <div
+                          key={d.fileS3Key}
+                          style={{ position: "relative", minWidth: 0 }}
+                          onClick={
+                            bulkMode
+                              ? () => toggleSelect(d.fileS3Key)
+                              : undefined
+                          }
+                        >
+                          {bulkMode && (
+                            <div
+                              style={{
+                                position: "absolute",
+                                top: 8,
+                                left: 8,
+                                zIndex: 10,
+                                width: 18,
+                                height: 18,
+                                borderRadius: 4,
+                                background: selected.has(d.fileS3Key)
+                                  ? "var(--accent)"
+                                  : "rgba(0,0,0,0.5)",
+                                border: `2px solid ${selected.has(d.fileS3Key) ? "var(--accent)" : "rgba(255,255,255,0.5)"}`,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                color: "#fff",
+                                fontSize: "0.65rem",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                transition: "background 0.1s",
+                              }}
+                            >
+                              {selected.has(d.fileS3Key) ? "✓" : ""}
+                            </div>
+                          )}
+                          <DocumentCard doc={d} />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          ) : (
+            <FileTree
+              documents={filtered}
+              simulatedTagPaths={simulatedTagPaths}
+              filter={fileFilter}
+              sortKey={sort as any}
+              selectedPath={selectedPath}
+              onSelect={(d) => setSelectedPath(d?.fileS3Key ?? null)}
+              onChanged={load}
+            />
+          )}
+
+          {/* Infinite-scroll sentinel — fetches the next chunk when it enters view */}
+          {view !== "tree" && hasMore && !loading && (
+            <div ref={sentinelRef} style={{ height: 1, marginTop: 4 }} />
+          )}
         </div>
+
+        {/* Status footer — infinite scroll, no page numbers */}
+        {(docs.length > 0 || loadingMore) && (
+          <div
+            style={{
+              padding: "5px 16px",
+              borderTop: "1px solid var(--border)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+              flexShrink: 0,
+              background: "var(--bg-surface)",
+              fontSize: "0.68rem",
+              color: "var(--text-3)",
+              fontFamily: "JetBrains Mono, monospace",
+            }}
+          >
+            {loadingMore ? (
+              <>
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: "var(--accent)",
+                    animation: "pulse 0.9s ease-in-out infinite",
+                  }}
+                />
+                {t.main_loadingMore}
+              </>
+            ) : hasMore ? (
+              t.main_loadedOf(docs.length, total)
+            ) : (
+              t.main_loadedAll(docs.length)
+            )}
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+const toolBtn: React.CSSProperties = {
+  background: "var(--bg-raised)",
+  border: "1px solid var(--border)",
+  borderRadius: 5,
+  cursor: "pointer",
+  color: "var(--text-2)",
+  fontSize: "0.73rem",
+  padding: "4px 8px",
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+};
+
+function TagBtn({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        width: "100%",
+        padding: "4px 8px",
+        border: "none",
+        borderRadius: 5,
+        cursor: "pointer",
+        fontSize: "0.77rem",
+        fontWeight: active ? 600 : 400,
+        background: active ? "var(--accent-glow)" : "transparent",
+        color: active ? "var(--accent)" : "var(--text-2)",
+        transition: "background 0.1s",
+        marginBottom: 1,
+        borderLeft: active
+          ? "2px solid var(--accent)"
+          : "2px solid transparent",
+      }}
+    >
+      <span
+        style={{
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          maxWidth: 112,
+        }}
+      >
+        {label}
+      </span>
+      <span
+        style={{
+          fontSize: "0.61rem",
+          color: "var(--text-3)",
+          flexShrink: 0,
+          fontFamily: "JetBrains Mono, monospace",
+        }}
+      >
+        {count}
+      </span>
+    </button>
+  );
+}
+function VBtn({
+  active,
+  onClick,
+  title,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        padding: "5px 8px",
+        border: "none",
+        background: active ? "var(--accent-glow)" : "transparent",
+        color: active ? "var(--accent)" : "var(--text-3)",
+        cursor: "pointer",
+        transition: "background 0.1s",
+        display: "flex",
+        alignItems: "center",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+function GridIco() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="3" width="7" height="7" />
+      <rect x="14" y="3" width="7" height="7" />
+      <rect x="14" y="14" width="7" height="7" />
+      <rect x="3" y="14" width="7" height="7" />
+    </svg>
+  );
+}
+function TreeIco() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <line x1="6" y1="3" x2="6" y2="15" />
+      <circle cx="18" cy="6" r="3" />
+      <circle cx="6" cy="18" r="3" />
+      <path d="M18 9a9 9 0 0 1-9 9" />
+    </svg>
+  );
+}
+function RefreshIco({ spin }: { spin: boolean }) {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ animation: spin ? "spin 1s linear infinite" : "none" }}
+    >
+      <polyline points="23 4 23 10 17 10" />
+      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+    </svg>
   );
 }
 

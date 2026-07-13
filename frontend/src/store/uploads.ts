@@ -6,6 +6,46 @@ import { checkHashExists } from "../api/client";
 import { reportError, reportSuccess } from "./toast";
 import { getI18n } from "../i18n";
 
+/**
+ * Local cache of hashes we've already confirmed exist server-side. Once a
+ * file is known to be a duplicate we never ask the API about that hash
+ * again — this avoids a redundant round trip for files that get re-dragged
+ * into the uploader repeatedly (a common pattern with bulk/whole-folder
+ * uploads). Capped so it can't grow unbounded across a long session.
+ */
+const KNOWN_DUP_KEY = "rain-dms-known-duplicate-hashes";
+const KNOWN_DUP_MAX = 20_000;
+
+function loadKnownDuplicates(): Set<string> {
+  try {
+    const raw = localStorage.getItem(KNOWN_DUP_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? new Set(arr) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+const knownDuplicateHashes = loadKnownDuplicates();
+
+function persistKnownDuplicates() {
+  try {
+    let list = Array.from(knownDuplicateHashes);
+    if (list.length > KNOWN_DUP_MAX) {
+      list = list.slice(list.length - KNOWN_DUP_MAX);
+    }
+    localStorage.setItem(KNOWN_DUP_KEY, JSON.stringify(list));
+  } catch {
+    /* storage full/unavailable — cache just won't persist across reloads */
+  }
+}
+
+function rememberDuplicate(hash: string) {
+  knownDuplicateHashes.add(hash);
+  persistKnownDuplicates();
+}
+
 export type UploadStatus =
   | { state: "pending" }
   | { state: "hashing" }
@@ -250,11 +290,18 @@ export const useUploadStore = create<UploadState>((set, get) => ({
         return;
       }
 
-      // Duplicate check
+      // Duplicate check — skip the API entirely if we already know this
+      // exact hash exists server-side (e.g. re-dragging the same folder).
+      if (knownDuplicateHashes.has(hash)) {
+        mutate(job.id, { state: "duplicate" });
+        set((s) => ({ activeWorkers: Math.max(0, s.activeWorkers - 1) }));
+        return;
+      }
       try {
         trackRequestStart();
         const { exists } = await checkHashExists(hash);
         if (exists) {
+          rememberDuplicate(hash);
           mutate(job.id, { state: "duplicate" });
           set((s) => ({ activeWorkers: Math.max(0, s.activeWorkers - 1) }));
           return;

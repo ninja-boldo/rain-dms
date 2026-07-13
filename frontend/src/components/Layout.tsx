@@ -7,7 +7,8 @@ import UploadPanel from "./UploadPanel";
 import ToastHost from "./ToastHost";
 import UrlSubstitutionPrompt from "./UrlSubstitutionPrompt";
 import ErrorLogMenu from "./ErrorLogMenu";
-import { useAllReminders } from "../store/localData";
+import { useAllReminders, useAllMarkers } from "../store/localData";
+import { getStats } from "../api/client";
 import { useI18n } from "../i18n";
 
 export default function Layout() {
@@ -22,7 +23,31 @@ export default function Layout() {
 
   const { isOpen, toggle, running, jobs } = useUploadStore();
   const allReminders = useAllReminders();
+  const allMarkers = useAllMarkers();
   const pendingRemindersCount = allReminders.filter((r) => !r.done_at).length;
+  const [totalDocs, setTotalDocs] = useState<number | null>(null);
+
+  // Total document count, always visible in the sidebar rather than buried
+  // in the Stats page. Cheap enough to poll — /stats is already cached
+  // server-side for a few seconds.
+  useEffect(() => {
+    let cancelled = false;
+    function refresh() {
+      getStats()
+        .then((s: any) => {
+          if (!cancelled && typeof s?.total_documents === "number") {
+            setTotalDocs(s.total_documents);
+          }
+        })
+        .catch(() => {});
+    }
+    refresh();
+    const id = setInterval(refresh, 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
 
   const activeCount = jobs.filter(
     (j) => j.status.state === "uploading" || j.status.state === "hashing",
@@ -186,14 +211,21 @@ export default function Layout() {
             gap: 1,
           }}
         >
-          <SideLink to="/" label={t.nav_documents} icon={<DocsIcon />} end />
+          <SideLink
+            to="/"
+            label={t.nav_documents}
+            icon={<DocsIcon />}
+            end
+            count={totalDocs ?? undefined}
+          />
           <SideLink to="/search" label={t.nav_search} icon={<SearchIcon />} />
           <SideLink
-            to="/stats"
-            label={t.nav_stats}
-            icon={<StatsIcon />}
-            badge={pendingRemindersCount}
+            to="/markers"
+            label={t.nav_markers}
+            icon={<BookmarkIcon />}
+            badge={pendingRemindersCount + allMarkers.length}
           />
+          <SideLink to="/stats" label={t.nav_stats} icon={<StatsIcon />} />
         </nav>
 
         {/* Bottom */}
@@ -260,12 +292,16 @@ function SideLink({
   icon,
   end,
   badge,
+  count,
 }: {
   to: string;
   label: string;
   icon: React.ReactNode;
   end?: boolean;
   badge?: number;
+  /** Muted informational count (e.g. total documents) — visually distinct
+   * from `badge`, which reads as an actionable alert. */
+  count?: number;
 }) {
   return (
     <NavLink
@@ -287,6 +323,17 @@ function SideLink({
     >
       {icon}
       <span style={{ flex: 1 }}>{label}</span>
+      {count != null && (
+        <span
+          style={{
+            fontSize: "0.66rem",
+            color: "var(--text-3)",
+            fontFamily: "JetBrains Mono, monospace",
+          }}
+        >
+          {count}
+        </span>
+      )}
       {!!badge && (
         <span
           style={{
@@ -411,6 +458,22 @@ function StatsIcon() {
       <line x1="18" y1="20" x2="18" y2="10" />
       <line x1="12" y1="20" x2="12" y2="4" />
       <line x1="6" y1="20" x2="6" y2="14" />
+    </svg>
+  );
+}
+function BookmarkIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
     </svg>
   );
 }

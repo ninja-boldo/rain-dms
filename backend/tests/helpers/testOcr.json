@@ -1,0 +1,7130 @@
+{
+  "pages": [
+    {
+      "pageNumber": 0,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 174,
+                  "y": 157
+                },
+                "downRightPoint": {
+                  "x": 507,
+                  "y": 188
+                }
+              },
+              "confidence": 0.9664729669176298,
+              "text": "1. Einführung in grundlegende"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 172,
+                  "y": 193
+                },
+                "downRightPoint": {
+                  "x": 287,
+                  "y": 224
+                }
+              },
+              "confidence": 0.9997796937823296,
+              "text": "Konzepte"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 1,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 14,
+                  "y": 13
+                },
+                "downRightPoint": {
+                  "x": 355,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9979900087629046,
+              "text": "Einordnung in den Vorlesungsverlauf"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 33,
+                  "y": 145
+                },
+                "downRightPoint": {
+                  "x": 377,
+                  "y": 166
+                }
+              },
+              "confidence": 0.9728753315775018,
+              "text": "1. Einführung in grundlegende Konzepte"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 32,
+                  "y": 177
+                },
+                "downRightPoint": {
+                  "x": 356,
+                  "y": 198
+                }
+              },
+              "confidence": 0.9850773956324603,
+              "text": "2. Konzeptioneller Entwurf: ER-Modell"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 33,
+                  "y": 209
+                },
+                "downRightPoint": {
+                  "x": 366,
+                  "y": 229
+                }
+              },
+              "confidence": 0.9862021317607478,
+              "text": "3. Logischer Entwurf: Relationenmodell"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 34,
+                  "y": 240
+                },
+                "downRightPoint": {
+                  "x": 459,
+                  "y": 260
+                }
+              },
+              "confidence": 0.9934905889082928,
+              "text": "4. Relationale Anfragesprachen: Relationenalgebra"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 32,
+                  "y": 271
+                },
+                "downRightPoint": {
+                  "x": 334,
+                  "y": 292
+                }
+              },
+              "confidence": 0.9766415585489834,
+              "text": "5. Structured Query Language (SQL)"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 31,
+                  "y": 301
+                },
+                "downRightPoint": {
+                  "x": 293,
+                  "y": 321
+                }
+              },
+              "confidence": 0.9882003208001454,
+              "text": "6. Relationale Entwurfstheorie"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 247,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9869842717522069,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 713,
+                  "y": 406
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9872395545244217,
+              "text": "1/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 2,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 12,
+                  "y": 13
+                },
+                "downRightPoint": {
+                  "x": 121,
+                  "y": 34
+                }
+              },
+              "confidence": 0.999971354007721,
+              "text": "Motivation"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 79
+                },
+                "downRightPoint": {
+                  "x": 335,
+                  "y": 101
+                }
+              },
+              "confidence": 0.9828231858484673,
+              "text": "• Überall werden Daten produziert"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 107
+                },
+                "downRightPoint": {
+                  "x": 494,
+                  "y": 128
+                }
+              },
+              "confidence": 0.9601728745080806,
+              "text": "• in Unternehmen, Verwaltung, Wissenschaft, privat, .."
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 39,
+                  "y": 138
+                },
+                "downRightPoint": {
+                  "x": 547,
+                  "y": 159
+                }
+              },
+              "confidence": 0.9882679145645212,
+              "text": "• Datenbanksysteme als Komponente von Softwaresystemen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 245,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9771255615510439,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 423,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 484,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9996427416801452,
+              "text": "Motivation"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 712,
+                  "y": 406
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9788698554039001,
+              "text": "2/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 3,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 12,
+                  "y": 13
+                },
+                "downRightPoint": {
+                  "x": 121,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9999714016914367,
+              "text": "Motivation"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 79
+                },
+                "downRightPoint": {
+                  "x": 335,
+                  "y": 101
+                }
+              },
+              "confidence": 0.9829196496443315,
+              "text": "• Überall werden Daten produziert"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 107
+                },
+                "downRightPoint": {
+                  "x": 494,
+                  "y": 128
+                }
+              },
+              "confidence": 0.9600930909315745,
+              "text": "• in Unternehmen, Verwaltung, Wissenschaft, privat, .."
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 41,
+                  "y": 138
+                },
+                "downRightPoint": {
+                  "x": 547,
+                  "y": 159
+                }
+              },
+              "confidence": 0.9852460821469625,
+              "text": "• Datenbanksysteme als Komponente von Softwaresystemen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 41,
+                  "y": 165
+                },
+                "downRightPoint": {
+                  "x": 465,
+                  "y": 185
+                }
+              },
+              "confidence": 0.9836535227298736,
+              "text": "• DB-Kenntnisse erforderlich für Informatik-Berufe"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 193
+                },
+                "downRightPoint": {
+                  "x": 381,
+                  "y": 214
+                }
+              },
+              "confidence": 0.9813657591217443,
+              "text": "• Nutzung, Administration, Entwicklung"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 245,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9625221286949358,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 423,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 484,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9996083974838257,
+              "text": "Motivation"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 711,
+                  "y": 406
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.8940072506666183,
+              "text": "2/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 4,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 12,
+                  "y": 13
+                },
+                "downRightPoint": {
+                  "x": 121,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9999744892120361,
+              "text": "Motivation"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 41,
+                  "y": 79
+                },
+                "downRightPoint": {
+                  "x": 334,
+                  "y": 100
+                }
+              },
+              "confidence": 0.9714323047435645,
+              "text": "• Überall werden Daten produziert"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 107
+                },
+                "downRightPoint": {
+                  "x": 494,
+                  "y": 128
+                }
+              },
+              "confidence": 0.971182851879685,
+              "text": "• in Unternehmen, Verwaltung, Wissenschaft, privat, .."
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 41,
+                  "y": 138
+                },
+                "downRightPoint": {
+                  "x": 547,
+                  "y": 159
+                }
+              },
+              "confidence": 0.9814821757652141,
+              "text": "• Datenbanksysteme als Komponente von Softwaresystemen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 39,
+                  "y": 164
+                },
+                "downRightPoint": {
+                  "x": 467,
+                  "y": 185
+                }
+              },
+              "confidence": 0.9702612137794495,
+              "text": "• DB-Kenntnisse erforderlich für Informatik-Berufe"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 193
+                },
+                "downRightPoint": {
+                  "x": 382,
+                  "y": 214
+                }
+              },
+              "confidence": 0.9813399095284311,
+              "text": "• Nutzung, Administration, Entwicklung"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 221
+                },
+                "downRightPoint": {
+                  "x": 300,
+                  "y": 241
+                }
+              },
+              "confidence": 0.9839653434424565,
+              "text": "• aktuelle Herausforderungen:"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 247
+                },
+                "downRightPoint": {
+                  "x": 592,
+                  "y": 267
+                }
+              },
+              "confidence": 0.990541842350593,
+              "text": "• Verwaltung von Daten im TByte/PByte-Bereich, viele Nutzer:innen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 272
+                },
+                "downRightPoint": {
+                  "x": 349,
+                  "y": 289
+                }
+              },
+              "confidence": 0.9828674810774186,
+              "text": "• weltweit verteilte Datenbestände"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 292
+                },
+                "downRightPoint": {
+                  "x": 247,
+                  "y": 313
+                }
+              },
+              "confidence": 0.9575906664133071,
+              "text": "• Multimedia-Inhalte"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 315
+                },
+                "downRightPoint": {
+                  "x": 323,
+                  "y": 335
+                }
+              },
+              "confidence": 0.9829413640883661,
+              "text": "• Hochverfügbarkeit, Sicherheit"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 339
+                },
+                "downRightPoint": {
+                  "x": 265,
+                  "y": 359
+                }
+              },
+              "confidence": 0.9463371733824412,
+              "text": "• Effizienz / Performanz"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 363
+                },
+                "downRightPoint": {
+                  "x": 323,
+                  "y": 383
+                }
+              },
+              "confidence": 0.9750585981777736,
+              "text": "• Anpassung an neue Hardware"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 248,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9816147434084039,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 423,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 484,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9995339155197144,
+              "text": "Motivation"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 711,
+                  "y": 408
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.8906783908605576,
+              "text": "2116"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 5,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 14,
+                  "y": 14
+                },
+                "downRightPoint": {
+                  "x": 283,
+                  "y": 34
+                }
+              },
+              "confidence": 0.970995261669159,
+              "text": "Probleme ohne Datenbanken"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 63
+                },
+                "downRightPoint": {
+                  "x": 299,
+                  "y": 83
+                }
+              },
+              "confidence": 0.9686075768300465,
+              "text": "· Redundanz und Inkonsistenz"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 87
+                },
+                "downRightPoint": {
+                  "x": 376,
+                  "y": 107
+                }
+              },
+              "confidence": 0.9794360415803062,
+              "text": "• Informationen mehrfach gespeichert"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 111
+                },
+                "downRightPoint": {
+                  "x": 357,
+                  "y": 131
+                }
+              },
+              "confidence": 0.9785348809126652,
+              "text": "• Verschwendung von Speicherplatz"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 133
+                },
+                "downRightPoint": {
+                  "x": 468,
+                  "y": 153
+                }
+              },
+              "confidence": 0.9868247633179029,
+              "text": "• Bei Änderungen Gefahr von inkonsistenten Daten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 247,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9857869258052424,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 380,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 524,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9643956995927371,
+              "text": "Probleme und Anforderungen"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 711,
+                  "y": 406
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9558426588773727,
+              "text": "3/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 6,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 14,
+                  "y": 14
+                },
+                "downRightPoint": {
+                  "x": 285,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9765804266929626,
+              "text": "Probleme ohne Datenbanken"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 65
+                },
+                "downRightPoint": {
+                  "x": 299,
+                  "y": 82
+                }
+              },
+              "confidence": 0.9654599449464253,
+              "text": "• Redundanz und Inkonsistenz"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 87
+                },
+                "downRightPoint": {
+                  "x": 376,
+                  "y": 107
+                }
+              },
+              "confidence": 0.9790527506007088,
+              "text": "• Informationen mehrfach gespeichert"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 111
+                },
+                "downRightPoint": {
+                  "x": 357,
+                  "y": 131
+                }
+              },
+              "confidence": 0.9792436812863206,
+              "text": "• Verschwendung von Speicherplatz"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 133
+                },
+                "downRightPoint": {
+                  "x": 468,
+                  "y": 153
+                }
+              },
+              "confidence": 0.9869973758856455,
+              "text": "• Bei Änderungen Gefahr von inkonsistenten Daten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 168
+                },
+                "downRightPoint": {
+                  "x": 240,
+                  "y": 188
+                }
+              },
+              "confidence": 0.9632391152174576,
+              "text": "• Zugriffsmöglichkeiten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 193
+                },
+                "downRightPoint": {
+                  "x": 554,
+                  "y": 213
+                }
+              },
+              "confidence": 0.9816403379205798,
+              "text": "• Isolierte Daten mit unterschiedlicher Verwaltung und Format"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 217
+                },
+                "downRightPoint": {
+                  "x": 574,
+                  "y": 234
+                }
+              },
+              "confidence": 0.9847011360628851,
+              "text": "• Fehlende Verknüpfung von logisch zusammenhängenden Daten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 248,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9808321767731717,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 380,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 524,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9597656084940984,
+              "text": "Probleme und Anforderungen"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 712,
+                  "y": 408
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9931981116533279,
+              "text": "3/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 7,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 14,
+                  "y": 14
+                },
+                "downRightPoint": {
+                  "x": 285,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9765804266929626,
+              "text": "Probleme ohne Datenbanken"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 65
+                },
+                "downRightPoint": {
+                  "x": 299,
+                  "y": 82
+                }
+              },
+              "confidence": 0.9654599449464253,
+              "text": "• Redundanz und Inkonsistenz"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 87
+                },
+                "downRightPoint": {
+                  "x": 376,
+                  "y": 107
+                }
+              },
+              "confidence": 0.9790527506007088,
+              "text": "• Informationen mehrfach gespeichert"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 111
+                },
+                "downRightPoint": {
+                  "x": 357,
+                  "y": 131
+                }
+              },
+              "confidence": 0.9792436812863206,
+              "text": "• Verschwendung von Speicherplatz"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 133
+                },
+                "downRightPoint": {
+                  "x": 468,
+                  "y": 153
+                }
+              },
+              "confidence": 0.9869973758856455,
+              "text": "• Bei Änderungen Gefahr von inkonsistenten Daten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 168
+                },
+                "downRightPoint": {
+                  "x": 240,
+                  "y": 188
+                }
+              },
+              "confidence": 0.9632391152174576,
+              "text": "• Zugriffsmöglichkeiten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 193
+                },
+                "downRightPoint": {
+                  "x": 554,
+                  "y": 213
+                }
+              },
+              "confidence": 0.9816403379205798,
+              "text": "• Isolierte Daten mit unterschiedlicher Verwaltung und Format"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 215
+                },
+                "downRightPoint": {
+                  "x": 574,
+                  "y": 235
+                }
+              },
+              "confidence": 0.9877341975425852,
+              "text": "• Fehlende Verknüpfung von logisch zusammenhängenden Daten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 41,
+                  "y": 249
+                },
+                "downRightPoint": {
+                  "x": 190,
+                  "y": 270
+                }
+              },
+              "confidence": 0.983455454601961,
+              "text": "• Datenintegrität"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 275
+                },
+                "downRightPoint": {
+                  "x": 362,
+                  "y": 295
+                }
+              },
+              "confidence": 0.9898632305009024,
+              "text": "• Regeln/Vorgaben nicht gut prüfbar"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 300
+                },
+                "downRightPoint": {
+                  "x": 362,
+                  "y": 317
+                }
+              },
+              "confidence": 0.9716007271233726,
+              "text": "• Gefahr von unerlaubten Zuständen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 56,
+                  "y": 410
+                },
+                "downRightPoint": {
+                  "x": 247,
+                  "y": 425
+                }
+              },
+              "confidence": 0.9819251926321733,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 380,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 524,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9636951272304242,
+              "text": "Probleme und Anforderungen"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 712,
+                  "y": 408
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9931238293647766,
+              "text": "3/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 8,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 14,
+                  "y": 14
+                },
+                "downRightPoint": {
+                  "x": 283,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9710296058654785,
+              "text": "Probleme ohne Datenbanken"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 65
+                },
+                "downRightPoint": {
+                  "x": 299,
+                  "y": 82
+                }
+              },
+              "confidence": 0.9678708144596645,
+              "text": "• Redundanz und Inkonsistenz"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 87
+                },
+                "downRightPoint": {
+                  "x": 376,
+                  "y": 107
+                }
+              },
+              "confidence": 0.9768698298268848,
+              "text": "• Informationen mehrfach gespeichert"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 111
+                },
+                "downRightPoint": {
+                  "x": 357,
+                  "y": 131
+                }
+              },
+              "confidence": 0.9787099289171624,
+              "text": "• Verschwendung von Speicherplatz"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 133
+                },
+                "downRightPoint": {
+                  "x": 468,
+                  "y": 153
+                }
+              },
+              "confidence": 0.9873446722825369,
+              "text": "• Bei Änderungen Gefahr von inkonsistenten Daten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 168
+                },
+                "downRightPoint": {
+                  "x": 240,
+                  "y": 188
+                }
+              },
+              "confidence": 0.9622393380040708,
+              "text": "• Zugriffsmöglichkeiten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 193
+                },
+                "downRightPoint": {
+                  "x": 555,
+                  "y": 214
+                }
+              },
+              "confidence": 0.9856831734297705,
+              "text": "• Isolierte Daten mit unterschiedlicher Verwaltung und Format"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 215
+                },
+                "downRightPoint": {
+                  "x": 574,
+                  "y": 235
+                }
+              },
+              "confidence": 0.9863647705522077,
+              "text": "• Fehlende Verknüpfung von logisch zusammenhängenden Daten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 41,
+                  "y": 249
+                },
+                "downRightPoint": {
+                  "x": 189,
+                  "y": 270
+                }
+              },
+              "confidence": 0.9845706680241753,
+              "text": "• Datenintegrität"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 275
+                },
+                "downRightPoint": {
+                  "x": 362,
+                  "y": 295
+                }
+              },
+              "confidence": 0.9882419398852758,
+              "text": "• Regeln/Vorgaben nicht gut prüfbar"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 298
+                },
+                "downRightPoint": {
+                  "x": 362,
+                  "y": 318
+                }
+              },
+              "confidence": 0.9868893430513495,
+              "text": "• Gefahr von unerlaubten Zuständen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 332
+                },
+                "downRightPoint": {
+                  "x": 195,
+                  "y": 352
+                }
+              },
+              "confidence": 0.9895099261227776,
+              "text": "• Datensicherheit"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 357
+                },
+                "downRightPoint": {
+                  "x": 330,
+                  "y": 377
+                }
+              },
+              "confidence": 0.9772555768489838,
+              "text": "• Wer darf Daten sehen/ändern?"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 380
+                },
+                "downRightPoint": {
+                  "x": 692,
+                  "y": 400
+                }
+              },
+              "confidence": 0.995333579453555,
+              "text": "• Lese-/Schreibrechte sollten für bestimmte Personengruppen festgelegt werden"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 248,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9868160533277612,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 380,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 524,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9878444694555722,
+              "text": "Probleme und Anforderungen"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 711,
+                  "y": 408
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9818013608455658,
+              "text": "3/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 9,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 14,
+                  "y": 14
+                },
+                "downRightPoint": {
+                  "x": 283,
+                  "y": 34
+                }
+              },
+              "confidence": 0.970995261669159,
+              "text": "Probleme ohne Datenbanken"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 65
+                },
+                "downRightPoint": {
+                  "x": 237,
+                  "y": 85
+                }
+              },
+              "confidence": 0.978993969304221,
+              "text": "• Mehrbenutzerbetrieb"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 91
+                },
+                "downRightPoint": {
+                  "x": 465,
+                  "y": 111
+                }
+              },
+              "confidence": 0.9728139746189117,
+              "text": "• Gleichzeitiger Zugriff von mehreren Nutzer:innen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 116
+                },
+                "downRightPoint": {
+                  "x": 508,
+                  "y": 133
+                }
+              },
+              "confidence": 0.9740464916596046,
+              "text": "· Gefahr von Anomalien durch Überschreiben von Daten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 139
+                },
+                "downRightPoint": {
+                  "x": 527,
+                  "y": 156
+                }
+              },
+              "confidence": 0.9870092102459499,
+              "text": "• Unerwünschte Blockierung aller Daten durch eine Person"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 247,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9865037140093351,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 380,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 524,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9632661434320303,
+              "text": "Probleme und Anforderungen"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 711,
+                  "y": 406
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9201965034008026,
+              "text": "4/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 10,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 14,
+                  "y": 14
+                },
+                "downRightPoint": {
+                  "x": 285,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9765804266929626,
+              "text": "Probleme ohne Datenbanken"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 65
+                },
+                "downRightPoint": {
+                  "x": 237,
+                  "y": 85
+                }
+              },
+              "confidence": 0.978993969304221,
+              "text": "• Mehrbenutzerbetrieb"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 91
+                },
+                "downRightPoint": {
+                  "x": 464,
+                  "y": 111
+                }
+              },
+              "confidence": 0.9837044191360473,
+              "text": "• Gleichzeitiger Zugriff von mehreren Nutzer:innen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 116
+                },
+                "downRightPoint": {
+                  "x": 508,
+                  "y": 133
+                }
+              },
+              "confidence": 0.9745279126442395,
+              "text": "· Gefahr von Anomalien durch Überschreiben von Daten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 137
+                },
+                "downRightPoint": {
+                  "x": 527,
+                  "y": 157
+                }
+              },
+              "confidence": 0.9917693978973797,
+              "text": "• Unerwünschte Blockierung aller Daten durch eine Person"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 39,
+                  "y": 176
+                },
+                "downRightPoint": {
+                  "x": 170,
+                  "y": 197
+                }
+              },
+              "confidence": 0.9766380574022021,
+              "text": "• Datenverlust"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 202
+                },
+                "downRightPoint": {
+                  "x": 480,
+                  "y": 223
+                }
+              },
+              "confidence": 0.9622596251964569,
+              "text": "· Daten können verloren gehen. Backup erforderlich"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 226
+                },
+                "downRightPoint": {
+                  "x": 546,
+                  "y": 246
+                }
+              },
+              "confidence": 0.9933585585173914,
+              "text": "• Wiederhergestellte Daten müssen weiterhin konsistent sein"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 248,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9846940040588379,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 380,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 524,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9696076970833999,
+              "text": "Probleme und Anforderungen"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 712,
+                  "y": 408
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.929601714015007,
+              "text": "4/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 11,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 14,
+                  "y": 14
+                },
+                "downRightPoint": {
+                  "x": 285,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9765804266929626,
+              "text": "Probleme ohne Datenbanken"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 65
+                },
+                "downRightPoint": {
+                  "x": 237,
+                  "y": 85
+                }
+              },
+              "confidence": 0.9785789705458141,
+              "text": "• Mehrbenutzerbetrieb"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 91
+                },
+                "downRightPoint": {
+                  "x": 464,
+                  "y": 111
+                }
+              },
+              "confidence": 0.9837104833126068,
+              "text": "• Gleichzeitiger Zugriff von mehreren Nutzer:innen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 116
+                },
+                "downRightPoint": {
+                  "x": 508,
+                  "y": 133
+                }
+              },
+              "confidence": 0.9728972705510947,
+              "text": "· Gefahr von Anomalien durch Überschreiben von Daten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 139
+                },
+                "downRightPoint": {
+                  "x": 527,
+                  "y": 156
+                }
+              },
+              "confidence": 0.9870395607181958,
+              "text": "• Unerwünschte Blockierung aller Daten durch eine Person"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 177
+                },
+                "downRightPoint": {
+                  "x": 169,
+                  "y": 197
+                }
+              },
+              "confidence": 0.9791222001825061,
+              "text": "• Datenverlust"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 202
+                },
+                "downRightPoint": {
+                  "x": 480,
+                  "y": 223
+                }
+              },
+              "confidence": 0.9592967796325683,
+              "text": "· Daten können verloren gehen. Backup erforderlich"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 226
+                },
+                "downRightPoint": {
+                  "x": 546,
+                  "y": 246
+                }
+              },
+              "confidence": 0.9932499194549302,
+              "text": "• Wiederhergestellte Daten müssen weiterhin konsistent sein"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 266
+                },
+                "downRightPoint": {
+                  "x": 131,
+                  "y": 286
+                }
+              },
+              "confidence": 0.9538948373361067,
+              "text": "• Effizienz"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 292
+                },
+                "downRightPoint": {
+                  "x": 645,
+                  "y": 312
+                }
+              },
+              "confidence": 0.9840033501386642,
+              "text": "· Effiziente Verwaltung und Verarbeitung großer Datenmengen erforderlich"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 56,
+                  "y": 410
+                },
+                "downRightPoint": {
+                  "x": 247,
+                  "y": 425
+                }
+              },
+              "confidence": 0.9822954143348493,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 380,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 525,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9966358061020191,
+              "text": "Probleme und Anforderungen"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 712,
+                  "y": 408
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9348734468221664,
+              "text": "4/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 12,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 14,
+                  "y": 14
+                },
+                "downRightPoint": {
+                  "x": 285,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9765804266929626,
+              "text": "Probleme ohne Datenbanken"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 65
+                },
+                "downRightPoint": {
+                  "x": 237,
+                  "y": 85
+                }
+              },
+              "confidence": 0.9783325479144142,
+              "text": "• Mehrbenutzerbetrieb"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 91
+                },
+                "downRightPoint": {
+                  "x": 464,
+                  "y": 111
+                }
+              },
+              "confidence": 0.9836670637130738,
+              "text": "• Gleichzeitiger Zugriff von mehreren Nutzer:innen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 116
+                },
+                "downRightPoint": {
+                  "x": 508,
+                  "y": 133
+                }
+              },
+              "confidence": 0.9796783236356882,
+              "text": "· Gefahr von Anomalien durch Überschreiben von Daten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 137
+                },
+                "downRightPoint": {
+                  "x": 527,
+                  "y": 157
+                }
+              },
+              "confidence": 0.9919732255595071,
+              "text": "• Unerwünschte Blockierung aller Daten durch eine Person"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 177
+                },
+                "downRightPoint": {
+                  "x": 169,
+                  "y": 197
+                }
+              },
+              "confidence": 0.9798905977181026,
+              "text": "• Datenverlust"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 202
+                },
+                "downRightPoint": {
+                  "x": 479,
+                  "y": 223
+                }
+              },
+              "confidence": 0.9652963763475418,
+              "text": "· Daten können verloren gehen. Backup erforderlich"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 226
+                },
+                "downRightPoint": {
+                  "x": 546,
+                  "y": 246
+                }
+              },
+              "confidence": 0.9853642532380961,
+              "text": "• Wiederhergestellte Daten müssen weiterhin konsistent sein"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 266
+                },
+                "downRightPoint": {
+                  "x": 131,
+                  "y": 286
+                }
+              },
+              "confidence": 0.9513343626802618,
+              "text": "• Effizienz"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 292
+                },
+                "downRightPoint": {
+                  "x": 645,
+                  "y": 312
+                }
+              },
+              "confidence": 0.9857010170817375,
+              "text": "· Effiziente Verwaltung und Verarbeitung großer Datenmengen erforderlich"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 332
+                },
+                "downRightPoint": {
+                  "x": 225,
+                  "y": 352
+                }
+              },
+              "confidence": 0.9911930501461029,
+              "text": "• Entwicklungskosten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 358
+                },
+                "downRightPoint": {
+                  "x": 730,
+                  "y": 378
+                }
+              },
+              "confidence": 0.9702944968953545,
+              "text": "• Entwicklung individueller Lösungen für jedes einzelne Anwendungsprogramm sollen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 92,
+                  "y": 384
+                },
+                "downRightPoint": {
+                  "x": 240,
+                  "y": 401
+                }
+              },
+              "confidence": 0.9994129948318005,
+              "text": "vermieden werden"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 245,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9768130112635461,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 380,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 525,
+                  "y": 426
+                }
+              },
+              "confidence": 0.996239708020137,
+              "text": "Probleme und Anforderungen"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 711,
+                  "y": 408
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.8636662885546684,
+              "text": "4/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 13,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 15,
+                  "y": 15
+                },
+                "downRightPoint": {
+                  "x": 195,
+                  "y": 35
+                }
+              },
+              "confidence": 0.9775041937828064,
+              "text": "Datenbanksysteme"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 39,
+                  "y": 70
+                },
+                "downRightPoint": {
+                  "x": 672,
+                  "y": 91
+                }
+              },
+              "confidence": 0.980756646966281,
+              "text": "• Seit den 7oern: Datenbanksysteme für die redundanzfreie und konsistente"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 56,
+                  "y": 97
+                },
+                "downRightPoint": {
+                  "x": 245,
+                  "y": 118
+                }
+              },
+              "confidence": 0.9764217287302017,
+              "text": "Verwaltung von Daten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 33,
+                  "y": 144
+                },
+                "downRightPoint": {
+                  "x": 246,
+                  "y": 166
+                }
+              },
+              "confidence": 0.9986678524450823,
+              "text": "Datenbanksystem (DBS):"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 34,
+                  "y": 171
+                },
+                "downRightPoint": {
+                  "x": 312,
+                  "y": 192
+                }
+              },
+              "confidence": 0.9870888463088444,
+              "text": "Datenbank zusammen mit einem"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 484,
+                  "y": 177
+                },
+                "downRightPoint": {
+                  "x": 579,
+                  "y": 199
+                }
+              },
+              "confidence": 0.9819100444967096,
+              "text": "Anwendung 1"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 619,
+                  "y": 178
+                },
+                "downRightPoint": {
+                  "x": 716,
+                  "y": 200
+                }
+              },
+              "confidence": 0.9969081390987743,
+              "text": "Anwendung n"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 585,
+                  "y": 187
+                },
+                "downRightPoint": {
+                  "x": 610,
+                  "y": 198
+                }
+              },
+              "confidence": 0.4564751386642456,
+              "text": "."
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 34,
+                  "y": 197
+                },
+                "downRightPoint": {
+                  "x": 299,
+                  "y": 218
+                }
+              },
+              "confidence": 0.9998060584068298,
+              "text": "Datenbankmanagementsystem"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 33,
+                  "y": 234
+                },
+                "downRightPoint": {
+                  "x": 139,
+                  "y": 255
+                }
+              },
+              "confidence": 0.9999010622501373,
+              "text": "Datenbank:"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 34,
+                  "y": 260
+                },
+                "downRightPoint": {
+                  "x": 377,
+                  "y": 281
+                }
+              },
+              "confidence": 0.985763430595398,
+              "text": "Sammlung von Daten, die miteinander in"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 572,
+                  "y": 253
+                },
+                "downRightPoint": {
+                  "x": 626,
+                  "y": 275
+                }
+              },
+              "confidence": 0.9976791441440582,
+              "text": "DBMS"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 35,
+                  "y": 287
+                },
+                "downRightPoint": {
+                  "x": 187,
+                  "y": 307
+                }
+              },
+              "confidence": 0.9988256953656673,
+              "text": "Beziehung stehen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 587,
+                  "y": 306
+                },
+                "downRightPoint": {
+                  "x": 612,
+                  "y": 327
+                }
+              },
+              "confidence": 0.19008757174015045,
+              "text": "V"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 33,
+                  "y": 320
+                },
+                "downRightPoint": {
+                  "x": 368,
+                  "y": 342
+                }
+              },
+              "confidence": 0.9975972482652375,
+              "text": "Datenbankmanagementsystem (DBMS):"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 34,
+                  "y": 348
+                },
+                "downRightPoint": {
+                  "x": 400,
+                  "y": 369
+                }
+              },
+              "confidence": 0.9975243987039079,
+              "text": "Software für die Erstellung, Verwaltung und"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 562,
+                  "y": 339
+                },
+                "downRightPoint": {
+                  "x": 638,
+                  "y": 356
+                }
+              },
+              "confidence": 0.9999480843544006,
+              "text": "Datenbank"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 32,
+                  "y": 374
+                },
+                "downRightPoint": {
+                  "x": 259,
+                  "y": 395
+                }
+              },
+              "confidence": 0.9993242745598158,
+              "text": "Abfrage von Datenbanken."
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 248,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9829133231388895,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 404,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 503,
+                  "y": 426
+                }
+              },
+              "confidence": 0.974059347063303,
+              "text": "Datenbanksysteme"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 712,
+                  "y": 408
+                },
+                "downRightPoint": {
+                  "x": 755,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9851426184177399,
+              "text": "5/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 14,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 15,
+                  "y": 14
+                },
+                "downRightPoint": {
+                  "x": 195,
+                  "y": 34
+                }
+              },
+              "confidence": 0.99986432492733,
+              "text": "Datenbanksysteme"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 20,
+                  "y": 107
+                },
+                "downRightPoint": {
+                  "x": 157,
+                  "y": 128
+                }
+              },
+              "confidence": 0.9916037962986872,
+              "text": "Aufgaben DBMS"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 41,
+                  "y": 149
+                },
+                "downRightPoint": {
+                  "x": 350,
+                  "y": 169
+                }
+              },
+              "confidence": 0.9678946784564427,
+              "text": "• persistente Speicherung von Daten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 38,
+                  "y": 178
+                },
+                "downRightPoint": {
+                  "x": 560,
+                  "y": 200
+                }
+              },
+              "confidence": 0.9629391072125271,
+              "text": ". Verknüpfung und effiziente Verwaltung großer Datenmengen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 38,
+                  "y": 210
+                },
+                "downRightPoint": {
+                  "x": 231,
+                  "y": 232
+                }
+              },
+              "confidence": 0.9769686251878739,
+              "text": "• Anfrageoptimierung"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 241
+                },
+                "downRightPoint": {
+                  "x": 464,
+                  "y": 261
+                }
+              },
+              "confidence": 0.9879203885793686,
+              "text": "• Sicherstellen von Konsistenz und Datenintegrität"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 273
+                },
+                "downRightPoint": {
+                  "x": 259,
+                  "y": 293
+                }
+              },
+              "confidence": 0.9851061415672302,
+              "text": "• Schutz vor Datenverlust"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 304
+                },
+                "downRightPoint": {
+                  "x": 346,
+                  "y": 324
+                }
+              },
+              "confidence": 0.9903086605999205,
+              "text": "• Datensicherheit und Zugriffsrechte"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 334
+                },
+                "downRightPoint": {
+                  "x": 322,
+                  "y": 354
+                }
+              },
+              "confidence": 0.9686407521367073,
+              "text": "· Effzienter Mehrbenutzerbetrieb"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 248,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9843664702616239,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 404,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 502,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9792649075388908,
+              "text": "Datenbanksysteme"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 712,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 755,
+                  "y": 426
+                }
+              },
+              "confidence": 0.953757107257843,
+              "text": "6/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 15,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 15,
+                  "y": 15
+                },
+                "downRightPoint": {
+                  "x": 195,
+                  "y": 35
+                }
+              },
+              "confidence": 0.9775041937828064,
+              "text": "Datenbanksysteme"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 20,
+                  "y": 64
+                },
+                "downRightPoint": {
+                  "x": 203,
+                  "y": 84
+                }
+              },
+              "confidence": 0.9998640865087509,
+              "text": "3-Ebenen Architektur"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 39,
+                  "y": 102
+                },
+                "downRightPoint": {
+                  "x": 600,
+                  "y": 122
+                }
+              },
+              "confidence": 0.9914604122822102,
+              "text": "• Physische Ebene: physische Speicherstrukturen und Zugriffspfade"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 245,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9624088798698626,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 404,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 501,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9528986252844334,
+              "text": "Datenbanksysteme"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 713,
+                  "y": 406
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.907779335975647,
+              "text": "7116"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 16,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 15,
+                  "y": 15
+                },
+                "downRightPoint": {
+                  "x": 195,
+                  "y": 35
+                }
+              },
+              "confidence": 0.9775041937828064,
+              "text": "Datenbanksysteme"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 21,
+                  "y": 65
+                },
+                "downRightPoint": {
+                  "x": 202,
+                  "y": 82
+                }
+              },
+              "confidence": 0.9996733427047729,
+              "text": "3-Ebenen Architektur"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 102
+                },
+                "downRightPoint": {
+                  "x": 600,
+                  "y": 122
+                }
+              },
+              "confidence": 0.9782990070489737,
+              "text": "• Physische Ebene: physische Speicherstrukturen und Zugriffspfade"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 43,
+                  "y": 130
+                },
+                "downRightPoint": {
+                  "x": 570,
+                  "y": 150
+                }
+              },
+              "confidence": 0.9954026162624359,
+              "text": "• Logische Ebene: Strukturen und Beziehungen der Daten sowie"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 58,
+                  "y": 156
+                },
+                "downRightPoint": {
+                  "x": 258,
+                  "y": 176
+                }
+              },
+              "confidence": 0.9815933812748302,
+              "text": "Integritätsbedingungen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 57,
+                  "y": 182
+                },
+                "downRightPoint": {
+                  "x": 585,
+                  "y": 202
+                }
+              },
+              "confidence": 0.9759302119077262,
+              "text": "→ Beschreibung üblicherweise in einem logischen Datenmodell"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 247,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9860939148225283,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 404,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 502,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9945615828037262,
+              "text": "Datenbanksysteme"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 713,
+                  "y": 408
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9519808143377304,
+              "text": "7116"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 17,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 15,
+                  "y": 17
+                },
+                "downRightPoint": {
+                  "x": 195,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9997538775205612,
+              "text": "Datenbanksysteme"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 21,
+                  "y": 65
+                },
+                "downRightPoint": {
+                  "x": 202,
+                  "y": 82
+                }
+              },
+              "confidence": 0.9996732592582702,
+              "text": "3-Ebenen Architektur"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 103
+                },
+                "downRightPoint": {
+                  "x": 600,
+                  "y": 120
+                }
+              },
+              "confidence": 0.9828377668674175,
+              "text": "• Physische Ebene: physische Speicherstrukturen und Zugriffspfade"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 131
+                },
+                "downRightPoint": {
+                  "x": 569,
+                  "y": 148
+                }
+              },
+              "confidence": 0.9784576346476873,
+              "text": "• Logische Ebene: Strukturen und Beziehungen der Daten sowie"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 57,
+                  "y": 158
+                },
+                "downRightPoint": {
+                  "x": 258,
+                  "y": 175
+                }
+              },
+              "confidence": 0.9995759888128801,
+              "text": "Integritätsbedingungen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 57,
+                  "y": 182
+                },
+                "downRightPoint": {
+                  "x": 585,
+                  "y": 202
+                }
+              },
+              "confidence": 0.9750431190102787,
+              "text": "→ Beschreibung üblicherweise in einem logischen Datenmodell"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 210
+                },
+                "downRightPoint": {
+                  "x": 409,
+                  "y": 230
+                }
+              },
+              "confidence": 0.9815232726030572,
+              "text": "• Externe Ebene: Sichten für Benutzer:innen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 248,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9843354397698453,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 404,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 502,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9920137785375118,
+              "text": "Datenbanksysteme"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 713,
+                  "y": 408
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9630331695079803,
+              "text": "7116"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 18,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 15,
+                  "y": 15
+                },
+                "downRightPoint": {
+                  "x": 195,
+                  "y": 35
+                }
+              },
+              "confidence": 0.9978586547076702,
+              "text": "Datenbanksysteme"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 21,
+                  "y": 65
+                },
+                "downRightPoint": {
+                  "x": 202,
+                  "y": 82
+                }
+              },
+              "confidence": 0.9996471583843232,
+              "text": "3-Ebenen Architektur"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 103
+                },
+                "downRightPoint": {
+                  "x": 600,
+                  "y": 120
+                }
+              },
+              "confidence": 0.9853230338830214,
+              "text": "• Physische Ebene: physische Speicherstrukturen und Zugriffspfade"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 43,
+                  "y": 131
+                },
+                "downRightPoint": {
+                  "x": 570,
+                  "y": 148
+                }
+              },
+              "confidence": 0.9785967866579691,
+              "text": "• Logische Ebene: Strukturen und Beziehungen der Daten sowie"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 57,
+                  "y": 156
+                },
+                "downRightPoint": {
+                  "x": 257,
+                  "y": 176
+                }
+              },
+              "confidence": 0.9996861083941027,
+              "text": "Integritätsbedingungen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 57,
+                  "y": 182
+                },
+                "downRightPoint": {
+                  "x": 586,
+                  "y": 202
+                }
+              },
+              "confidence": 0.9849538580845978,
+              "text": "→ Beschreibung üblicherweise in einem logischen Datenmodell"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 210
+                },
+                "downRightPoint": {
+                  "x": 409,
+                  "y": 230
+                }
+              },
+              "confidence": 0.9791329211966936,
+              "text": "• Externe Ebene: Sichten für Benutzer:innen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 20,
+                  "y": 263
+                },
+                "downRightPoint": {
+                  "x": 207,
+                  "y": 284
+                }
+              },
+              "confidence": 0.9997921115473697,
+              "text": "Datenunabhängigkeit"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 41,
+                  "y": 301
+                },
+                "downRightPoint": {
+                  "x": 736,
+                  "y": 322
+                }
+              },
+              "confidence": 0.976676059839053,
+              "text": "· physische Datenunabhängigkeit: Änderungen der physischen Ebene möglich, ohne"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 57,
+                  "y": 328
+                },
+                "downRightPoint": {
+                  "x": 305,
+                  "y": 348
+                }
+              },
+              "confidence": 0.9952191880771092,
+              "text": "die logische Ebene zu ändern"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 43,
+                  "y": 357
+                },
+                "downRightPoint": {
+                  "x": 712,
+                  "y": 377
+                }
+              },
+              "confidence": 0.989449323007935,
+              "text": "• logische Datenunabhängigkeit: Änderungen der logischen Ebene möglich, ohne"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 58,
+                  "y": 385
+                },
+                "downRightPoint": {
+                  "x": 298,
+                  "y": 402
+                }
+              },
+              "confidence": 0.9822853649104083,
+              "text": "die externe Ebene zu ändern"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 248,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9779264377920251,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 404,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 503,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9733056351542473,
+              "text": "Datenbanksysteme"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 711,
+                  "y": 408
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9269814789295197,
+              "text": "7116"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 19,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 15,
+                  "y": 14
+                },
+                "downRightPoint": {
+                  "x": 203,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9998409432523391,
+              "text": "Datenbanksprachen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 21,
+                  "y": 120
+                },
+                "downRightPoint": {
+                  "x": 427,
+                  "y": 137
+                }
+              },
+              "confidence": 0.991357242067655,
+              "text": "Datendefinitionssprache (DDL) für Definition von"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 158
+                },
+                "downRightPoint": {
+                  "x": 680,
+                  "y": 178
+                }
+              },
+              "confidence": 0.9822628246226781,
+              "text": "· Datenbankschema: Struktur der Datenobjekte und Beziehungen zueinander"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 190
+                },
+                "downRightPoint": {
+                  "x": 564,
+                  "y": 210
+                }
+              },
+              "confidence": 0.9851056718435444,
+              "text": "• Integritätsbedingungen: Einschränkungen für zulässige Daten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 247,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9725281031508195,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 404,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 502,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9839352928102016,
+              "text": "Datenbanksysteme"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 712,
+                  "y": 406
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.988387942314148,
+              "text": "8/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 20,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 15,
+                  "y": 17
+                },
+                "downRightPoint": {
+                  "x": 203,
+                  "y": 34
+                }
+              },
+              "confidence": 0.99889036136515,
+              "text": "Datenbanksprachen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 21,
+                  "y": 118
+                },
+                "downRightPoint": {
+                  "x": 427,
+                  "y": 138
+                }
+              },
+              "confidence": 0.9868289890388647,
+              "text": "Datendefinitionssprache (DDL) für Definition von"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 158
+                },
+                "downRightPoint": {
+                  "x": 679,
+                  "y": 178
+                }
+              },
+              "confidence": 0.9793498478305172,
+              "text": "· Datenbankschema: Struktur der Datenobjekte und Beziehungen zueinander"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 190
+                },
+                "downRightPoint": {
+                  "x": 564,
+                  "y": 210
+                }
+              },
+              "confidence": 0.9851279483466852,
+              "text": "• Integritätsbedingungen: Einschränkungen für zulässige Daten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 20,
+                  "y": 249
+                },
+                "downRightPoint": {
+                  "x": 312,
+                  "y": 270
+                }
+              },
+              "confidence": 0.9995437956625416,
+              "text": "Datenmanipulationssprache (DML)"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 39,
+                  "y": 289
+                },
+                "downRightPoint": {
+                  "x": 608,
+                  "y": 310
+                }
+              },
+              "confidence": 0.9865517275674003,
+              "text": "• Datenmanipulationen: Einfügen, Änderung und Löschen von Daten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 321
+                },
+                "downRightPoint": {
+                  "x": 555,
+                  "y": 341
+                }
+              },
+              "confidence": 0.9869517429930265,
+              "text": "• Anfragen: Auslesen von Daten (teilweise als DQL bezeichnet)"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 248,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9803025612705633,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 404,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 503,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9741847328841686,
+              "text": "Datenbanksysteme"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 712,
+                  "y": 408
+                },
+                "downRightPoint": {
+                  "x": 755,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9809566736221313,
+              "text": "8/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 21,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 11,
+                  "y": 13
+                },
+                "downRightPoint": {
+                  "x": 196,
+                  "y": 35
+                }
+              },
+              "confidence": 0.9818438755141364,
+              "text": "Schema vs. Instanz"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 17,
+                  "y": 67
+                },
+                "downRightPoint": {
+                  "x": 428,
+                  "y": 88
+                }
+              },
+              "confidence": 0.9951171043307282,
+              "text": "Datenbankschema: Beschreibung der Datenbank"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 38,
+                  "y": 120
+                },
+                "downRightPoint": {
+                  "x": 555,
+                  "y": 142
+                }
+              },
+              "confidence": 0.9851240438633951,
+              "text": "• Datenbankstruktur, Datentypen und Integritätsbedingungen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 38,
+                  "y": 149
+                },
+                "downRightPoint": {
+                  "x": 213,
+                  "y": 175
+                }
+              },
+              "confidence": 0.9473964840173721,
+              "text": "• ändert sich selten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 53,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 247,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9420592126093412,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 404,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 502,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9958347268402576,
+              "text": "Datenbanksysteme"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 711,
+                  "y": 406
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9865039885044098,
+              "text": "9/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 22,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 11,
+                  "y": 13
+                },
+                "downRightPoint": {
+                  "x": 196,
+                  "y": 35
+                }
+              },
+              "confidence": 0.9797791639963785,
+              "text": "Schema vs. Instanz"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 14,
+                  "y": 65
+                },
+                "downRightPoint": {
+                  "x": 430,
+                  "y": 92
+                }
+              },
+              "confidence": 0.983469080093295,
+              "text": "Datenbankschema: Beschreibung der Datenbank"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 37,
+                  "y": 118
+                },
+                "downRightPoint": {
+                  "x": 554,
+                  "y": 145
+                }
+              },
+              "confidence": 0.9624741694022869,
+              "text": "• Datenbankstruktur, Datentypen und Integritätsbedingungen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 38,
+                  "y": 149
+                },
+                "downRightPoint": {
+                  "x": 213,
+                  "y": 175
+                }
+              },
+              "confidence": 0.9378562778234482,
+              "text": "• ändert sich selten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 17,
+                  "y": 253
+                },
+                "downRightPoint": {
+                  "x": 648,
+                  "y": 275
+                }
+              },
+              "confidence": 0.9955566508429391,
+              "text": "Datenbankinstanz: Daten in der Datenbank zu einem bestimmten Zeitpunkt"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 305
+                },
+                "downRightPoint": {
+                  "x": 494,
+                  "y": 331
+                }
+              },
+              "confidence": 0.9903949821988741,
+              "text": "• auch Datenbankzustand oder Datenbankausprägung"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 38,
+                  "y": 337
+                },
+                "downRightPoint": {
+                  "x": 214,
+                  "y": 359
+                }
+              },
+              "confidence": 0.9698585361242295,
+              "text": "· ändert sich häufig"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 53,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 248,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9275889459409212,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 403,
+                  "y": 408
+                },
+                "downRightPoint": {
+                  "x": 503,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9662784412503242,
+              "text": "Datenbanksysteme"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 709,
+                  "y": 405
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9971297979354858,
+              "text": "9/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 23,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 12,
+                  "y": 12
+                },
+                "downRightPoint": {
+                  "x": 196,
+                  "y": 38
+                }
+              },
+              "confidence": 0.9973896576298608,
+              "text": "Schema vs. Instanz"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 15,
+                  "y": 66
+                },
+                "downRightPoint": {
+                  "x": 428,
+                  "y": 92
+                }
+              },
+              "confidence": 0.9985712752785794,
+              "text": "Datenbankschema: Beschreibung der Datenbank"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 119
+                },
+                "downRightPoint": {
+                  "x": 553,
+                  "y": 145
+                }
+              },
+              "confidence": 0.985620187274341,
+              "text": "• Datenbankstruktur, Datentypen und Integritätsbedingungen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 38,
+                  "y": 149
+                },
+                "downRightPoint": {
+                  "x": 215,
+                  "y": 175
+                }
+              },
+              "confidence": 0.9540289998054504,
+              "text": "• ändert sich selten"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 22,
+                  "y": 193
+                },
+                "downRightPoint": {
+                  "x": 426,
+                  "y": 214
+                }
+              },
+              "confidence": 0.9704815636981617,
+              "text": "→ Mit DDL Erstellung/Veränderung des Schemas"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 17,
+                  "y": 253
+                },
+                "downRightPoint": {
+                  "x": 648,
+                  "y": 275
+                }
+              },
+              "confidence": 0.9963199649538312,
+              "text": "Datenbankinstanz: Daten in der Datenbank zu einem bestimmten Zeitpunkt"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 305
+                },
+                "downRightPoint": {
+                  "x": 494,
+                  "y": 331
+                }
+              },
+              "confidence": 0.9809303358197212,
+              "text": "• auch Datenbankzustand oder Datenbankausprägung"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 38,
+                  "y": 337
+                },
+                "downRightPoint": {
+                  "x": 213,
+                  "y": 359
+                }
+              },
+              "confidence": 0.9765211641788483,
+              "text": "· ändert sich häufig"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 19,
+                  "y": 376
+                },
+                "downRightPoint": {
+                  "x": 702,
+                  "y": 402
+                }
+              },
+              "confidence": 0.9790341227869445,
+              "text": "→ Mit DML Veränderung der Instanz bzw. Abfragen basierend auf aktueller Instanz"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 53,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 248,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9245220203148691,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 404,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 503,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9712519310414791,
+              "text": "Datenbanksysteme"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 708,
+                  "y": 405
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9968668222427368,
+              "text": "9/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 24,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 14,
+                  "y": 13
+                },
+                "downRightPoint": {
+                  "x": 302,
+                  "y": 33
+                }
+              },
+              "confidence": 0.9985410829385122,
+              "text": "Historie von relationalen DBMS"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 41,
+                  "y": 130
+                },
+                "downRightPoint": {
+                  "x": 648,
+                  "y": 150
+                }
+              },
+              "confidence": 0.972479693486657,
+              "text": "• 197o: Relationenmodell von Ted Codd (IBM): Grundlage relationaler DBS"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 39,
+                  "y": 158
+                },
+                "downRightPoint": {
+                  "x": 252,
+                  "y": 178
+                }
+              },
+              "confidence": 0.946221632262071,
+              "text": "• 1974: System R von IBM"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 184
+                },
+                "downRightPoint": {
+                  "x": 276,
+                  "y": 204
+                }
+              },
+              "confidence": 0.9724740956140601,
+              "text": "• Anfragesprache SEQUEL"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 209
+                },
+                "downRightPoint": {
+                  "x": 310,
+                  "y": 226
+                }
+              },
+              "confidence": 0.9777963243681809,
+              "text": "• erster Prototyp eines rDBMS"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 235
+                },
+                "downRightPoint": {
+                  "x": 529,
+                  "y": 255
+                }
+              },
+              "confidence": 0.9832938176686646,
+              "text": "• 1975: Ingres von University of California at Berkeley (UCB)"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 262
+                },
+                "downRightPoint": {
+                  "x": 260,
+                  "y": 282
+                }
+              },
+              "confidence": 0.9582680662473043,
+              "text": "• Anfragesprache QUEL"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 286
+                },
+                "downRightPoint": {
+                  "x": 357,
+                  "y": 306
+                }
+              },
+              "confidence": 0.9685530662536621,
+              "text": "• Vorgänger von Postgres, Sybase, .."
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 315
+                },
+                "downRightPoint": {
+                  "x": 562,
+                  "y": 335
+                }
+              },
+              "confidence": 0.9844104830295809,
+              "text": "• 1979: Oracle Version 2: erstes kommerziell verfügbares rDBMS"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 248,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9831951025285219,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 395,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 514,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9839259049166804,
+              "text": "Historische Entwicklung"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 709,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9974093675613404,
+              "text": "10/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 25,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 13,
+                  "y": 13
+                },
+                "downRightPoint": {
+                  "x": 139,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9984848300615946,
+              "text": "Aktuelle DBS"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 21,
+                  "y": 65
+                },
+                "downRightPoint": {
+                  "x": 229,
+                  "y": 82
+                }
+              },
+              "confidence": 0.9888055454129758,
+              "text": "relationale Datenbanken"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 39,
+                  "y": 102
+                },
+                "downRightPoint": {
+                  "x": 366,
+                  "y": 119
+                }
+              },
+              "confidence": 0.9731852106145911,
+              "text": "• Sprachen: verschiedene SQL Dialekte"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 126
+                },
+                "downRightPoint": {
+                  "x": 666,
+                  "y": 146
+                }
+              },
+              "confidence": 0.9769005332444165,
+              "text": "· kommerzielle Produkte: Oracle, Microsoft SQL Server, Snowflake, IBM DB2,"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 152
+                },
+                "downRightPoint": {
+                  "x": 225,
+                  "y": 173
+                }
+              },
+              "confidence": 0.971024751663208,
+              "text": "Microsoft Access, .."
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 39,
+                  "y": 178
+                },
+                "downRightPoint": {
+                  "x": 514,
+                  "y": 199
+                }
+              },
+              "confidence": 0.9705564203085723,
+              "text": "• Open Source Produkte: PostgreSQL, MySQL, MariaDB, .."
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 247,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9860577332346063,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 395,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 514,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9792717565660891,
+              "text": "Historische Entwicklung"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 710,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 755,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9707244277000427,
+              "text": "11/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 26,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 13,
+                  "y": 13
+                },
+                "downRightPoint": {
+                  "x": 139,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9984848300615946,
+              "text": "Aktuelle DBS"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 21,
+                  "y": 65
+                },
+                "downRightPoint": {
+                  "x": 229,
+                  "y": 82
+                }
+              },
+              "confidence": 0.9888055454129758,
+              "text": "relationale Datenbanken"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 102
+                },
+                "downRightPoint": {
+                  "x": 366,
+                  "y": 119
+                }
+              },
+              "confidence": 0.9877180553771354,
+              "text": "• Sprachen: verschiedene SQL Dialekte"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 126
+                },
+                "downRightPoint": {
+                  "x": 666,
+                  "y": 146
+                }
+              },
+              "confidence": 0.9773849683838922,
+              "text": "· kommerzielle Produkte: Oracle, Microsoft SQL Server, Snowflake, IBM DB2,"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 152
+                },
+                "downRightPoint": {
+                  "x": 225,
+                  "y": 173
+                }
+              },
+              "confidence": 0.9663993149995804,
+              "text": "Microsoft Access, .."
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 39,
+                  "y": 178
+                },
+                "downRightPoint": {
+                  "x": 514,
+                  "y": 199
+                }
+              },
+              "confidence": 0.9728386501471201,
+              "text": "• Open Source Produkte: PostgreSQL, MySQL, MariaDB, .."
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 21,
+                  "y": 230
+                },
+                "downRightPoint": {
+                  "x": 412,
+                  "y": 247
+                }
+              },
+              "confidence": 0.9824761231740315,
+              "text": "Alternative: noSQL (not only SQL) Datenbanken"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 263
+                },
+                "downRightPoint": {
+                  "x": 375,
+                  "y": 280
+                }
+              },
+              "confidence": 0.9843993137280146,
+              "text": "• Dokumentenorientierte Datenbanken:"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 286
+                },
+                "downRightPoint": {
+                  "x": 317,
+                  "y": 306
+                }
+              },
+              "confidence": 0.9543642874421745,
+              "text": "• Redis, MongoDB, CouchDB, .."
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 56,
+                  "y": 410
+                },
+                "downRightPoint": {
+                  "x": 247,
+                  "y": 425
+                }
+              },
+              "confidence": 0.981937355116794,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 395,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 514,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9915329710296963,
+              "text": "Historische Entwicklung"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 710,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 755,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9703384160995483,
+              "text": "11/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 27,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 13,
+                  "y": 13
+                },
+                "downRightPoint": {
+                  "x": 139,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9984848300615946,
+              "text": "Aktuelle DBS"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 21,
+                  "y": 65
+                },
+                "downRightPoint": {
+                  "x": 229,
+                  "y": 82
+                }
+              },
+              "confidence": 0.9885984114978624,
+              "text": "relationale Datenbanken"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 102
+                },
+                "downRightPoint": {
+                  "x": 366,
+                  "y": 119
+                }
+              },
+              "confidence": 0.9877576860221656,
+              "text": "• Sprachen: verschiedene SQL Dialekte"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 126
+                },
+                "downRightPoint": {
+                  "x": 666,
+                  "y": 146
+                }
+              },
+              "confidence": 0.9772450601732409,
+              "text": "· kommerzielle Produkte: Oracle, Microsoft SQL Server, Snowflake, IBM DB2,"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 152
+                },
+                "downRightPoint": {
+                  "x": 225,
+                  "y": 173
+                }
+              },
+              "confidence": 0.9391221716290429,
+              "text": "Microsoft Access, ..."
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 41,
+                  "y": 178
+                },
+                "downRightPoint": {
+                  "x": 514,
+                  "y": 199
+                }
+              },
+              "confidence": 0.9693190058072408,
+              "text": "• Open Source Produkte: PostgreSQL, MySQL, MariaDB, .."
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 21,
+                  "y": 230
+                },
+                "downRightPoint": {
+                  "x": 412,
+                  "y": 247
+                }
+              },
+              "confidence": 0.982130249341329,
+              "text": "Alternative: noSQL (not only SQL) Datenbanken"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 261
+                },
+                "downRightPoint": {
+                  "x": 375,
+                  "y": 281
+                }
+              },
+              "confidence": 0.9711425114009116,
+              "text": "• Dokumentenorientierte Datenbanken:"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 286
+                },
+                "downRightPoint": {
+                  "x": 317,
+                  "y": 306
+                }
+              },
+              "confidence": 0.9574075361777996,
+              "text": "• Redis, MongoDB, CouchDB, .."
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 311
+                },
+                "downRightPoint": {
+                  "x": 225,
+                  "y": 328
+                }
+              },
+              "confidence": 0.9764614858125386,
+              "text": "• Graphdatenbanken:"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 332
+                },
+                "downRightPoint": {
+                  "x": 362,
+                  "y": 352
+                }
+              },
+              "confidence": 0.9911047322409493,
+              "text": "• Sprachen: SPARQL, Gremlin, Cypher"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 356
+                },
+                "downRightPoint": {
+                  "x": 326,
+                  "y": 376
+                }
+              },
+              "confidence": 0.9655756235122681,
+              "text": "• Aerospike, Neo4j, ArangoDB, "
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 248,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9846537787663309,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 395,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 513,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9948292711506719,
+              "text": "Historische Entwicklung"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 710,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 755,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9694152355194092,
+              "text": "11/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 28,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 13,
+                  "y": 13
+                },
+                "downRightPoint": {
+                  "x": 139,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9984848300615946,
+              "text": "Aktuelle DBS"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 21,
+                  "y": 64
+                },
+                "downRightPoint": {
+                  "x": 229,
+                  "y": 84
+                }
+              },
+              "confidence": 0.9861403962840205,
+              "text": "relationale Datenbanken"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 102
+                },
+                "downRightPoint": {
+                  "x": 366,
+                  "y": 119
+                }
+              },
+              "confidence": 0.9877576860221656,
+              "text": "• Sprachen: verschiedene SQL Dialekte"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 126
+                },
+                "downRightPoint": {
+                  "x": 666,
+                  "y": 146
+                }
+              },
+              "confidence": 0.9772333309457109,
+              "text": "· kommerzielle Produkte: Oracle, Microsoft SQL Server, Snowflake, IBM DB2,"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 152
+                },
+                "downRightPoint": {
+                  "x": 225,
+                  "y": 173
+                }
+              },
+              "confidence": 0.9638627856969834,
+              "text": "Microsoft Access, .."
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 41,
+                  "y": 178
+                },
+                "downRightPoint": {
+                  "x": 514,
+                  "y": 199
+                }
+              },
+              "confidence": 0.9693399921611503,
+              "text": "• Open Source Produkte: PostgreSQL, MySQL, MariaDB, .."
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 21,
+                  "y": 230
+                },
+                "downRightPoint": {
+                  "x": 412,
+                  "y": 247
+                }
+              },
+              "confidence": 0.9812159869405959,
+              "text": "Alternative: noSQL (not only SQL) Datenbanken"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 261
+                },
+                "downRightPoint": {
+                  "x": 375,
+                  "y": 281
+                }
+              },
+              "confidence": 0.9716505954662958,
+              "text": "· Dokumentenorientierte Datenbanken:"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 77,
+                  "y": 286
+                },
+                "downRightPoint": {
+                  "x": 317,
+                  "y": 306
+                }
+              },
+              "confidence": 0.9563894662363776,
+              "text": "• Redis, MongoDB, CouchDB, .."
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 40,
+                  "y": 311
+                },
+                "downRightPoint": {
+                  "x": 225,
+                  "y": 328
+                }
+              },
+              "confidence": 0.9765405999986749,
+              "text": "• Graphdatenbanken:"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 332
+                },
+                "downRightPoint": {
+                  "x": 362,
+                  "y": 352
+                }
+              },
+              "confidence": 0.991013080733163,
+              "text": "• Sprachen: SPARQL, Gremlin, Cypher"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 78,
+                  "y": 356
+                },
+                "downRightPoint": {
+                  "x": 326,
+                  "y": 376
+                }
+              },
+              "confidence": 0.9639967739582062,
+              "text": "• Aerospike, Neo4j, ArangoDB, "
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 43,
+                  "y": 382
+                },
+                "downRightPoint": {
+                  "x": 564,
+                  "y": 403
+                }
+              },
+              "confidence": 0.9843130101591854,
+              "text": "• weitere: Key-Value-Datenbanken, Multivalue-Datenbanken, ."
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 248,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9855136714483562,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 393,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 512,
+                  "y": 426
+                }
+              },
+              "confidence": 0.971870349801105,
+              "text": "Historische Entwicklung"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 710,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9908300042152405,
+              "text": "11/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 29,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 14,
+                  "y": 14
+                },
+                "downRightPoint": {
+                  "x": 307,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9994360421385083,
+              "text": "Phasen des Datenbankentwurfs"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 39,
+                  "y": 110
+                },
+                "downRightPoint": {
+                  "x": 235,
+                  "y": 131
+                }
+              },
+              "confidence": 0.9998557693079898,
+              "text": "Anforderungsanalyse"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 37,
+                  "y": 162
+                },
+                "downRightPoint": {
+                  "x": 235,
+                  "y": 183
+                }
+              },
+              "confidence": 0.9931220071656364,
+              "text": "konzeptueller Entwurf"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 263,
+                  "y": 159
+                },
+                "downRightPoint": {
+                  "x": 461,
+                  "y": 180
+                }
+              },
+              "confidence": 0.9735702140764757,
+              "text": "1. Anforderungsanalyse"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 122,
+                  "y": 190
+                },
+                "downRightPoint": {
+                  "x": 146,
+                  "y": 212
+                }
+              },
+              "confidence": 0.6419119834899902,
+              "text": "↓"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 284,
+                  "y": 190
+                },
+                "downRightPoint": {
+                  "x": 699,
+                  "y": 211
+                }
+              },
+              "confidence": 0.9918731943420742,
+              "text": "• Befragung von Kunden/zukünftige Nutzer:innen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 35,
+                  "y": 217
+                },
+                "downRightPoint": {
+                  "x": 62,
+                  "y": 234
+                }
+              },
+              "confidence": 0,
+              "text": ""
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 51,
+                  "y": 214
+                },
+                "downRightPoint": {
+                  "x": 215,
+                  "y": 236
+                }
+              },
+              "confidence": 0.9992748849532184,
+              "text": "logischer Entwurf"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 285,
+                  "y": 221
+                },
+                "downRightPoint": {
+                  "x": 675,
+                  "y": 242
+                }
+              },
+              "confidence": 0.9862869437350783,
+              "text": "• Analyse der Informationen zum Fachproblem"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 123,
+                  "y": 242
+                },
+                "downRightPoint": {
+                  "x": 147,
+                  "y": 264
+                }
+              },
+              "confidence": 0.7512128949165344,
+              "text": "↓"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 285,
+                  "y": 253
+                },
+                "downRightPoint": {
+                  "x": 671,
+                  "y": 273
+                }
+              },
+              "confidence": 0.9888501530740319,
+              "text": "• Trennung von Datenbankanforderungen und"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 65,
+                  "y": 266
+                },
+                "downRightPoint": {
+                  "x": 204,
+                  "y": 287
+                }
+              },
+              "confidence": 0.9899454355239868,
+              "text": "Datendefinition"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 299,
+                  "y": 278
+                },
+                "downRightPoint": {
+                  "x": 541,
+                  "y": 299
+                }
+              },
+              "confidence": 0.9972930390101212,
+              "text": "funktionalen Anforderungen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 123,
+                  "y": 294
+                },
+                "downRightPoint": {
+                  "x": 145,
+                  "y": 316
+                }
+              },
+              "confidence": 0.6734960079193115,
+              "text": "↓"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 47,
+                  "y": 318
+                },
+                "downRightPoint": {
+                  "x": 218,
+                  "y": 339
+                }
+              },
+              "confidence": 0.999702082739936,
+              "text": "physischer Entwurf"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 248,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9838033538115653,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 405,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 501,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9431455694139004,
+              "text": "Datenbankentwurf"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 709,
+                  "y": 406
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9974776029586792,
+              "text": "12/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 30,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 14,
+                  "y": 17
+                },
+                "downRightPoint": {
+                  "x": 307,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9997475040810448,
+              "text": "Phasen des Datenbankentwurfs"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 38,
+                  "y": 110
+                },
+                "downRightPoint": {
+                  "x": 235,
+                  "y": 131
+                }
+              },
+              "confidence": 0.9820845566297832,
+              "text": "Anforderungsanalyse"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 34,
+                  "y": 162
+                },
+                "downRightPoint": {
+                  "x": 235,
+                  "y": 183
+                }
+              },
+              "confidence": 0.9967474085944039,
+              "text": "konzeptueller Entwurf"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 262,
+                  "y": 159
+                },
+                "downRightPoint": {
+                  "x": 472,
+                  "y": 179
+                }
+              },
+              "confidence": 0.9975027590990067,
+              "text": "2. Konzeptueller Entwurf"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 123,
+                  "y": 190
+                },
+                "downRightPoint": {
+                  "x": 145,
+                  "y": 212
+                }
+              },
+              "confidence": 0.7652729153633118,
+              "text": "↓"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 284,
+                  "y": 190
+                },
+                "downRightPoint": {
+                  "x": 632,
+                  "y": 211
+                }
+              },
+              "confidence": 0.9801271950326315,
+              "text": "• erste formale Beschreibung (high-level)"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 37,
+                  "y": 217
+                },
+                "downRightPoint": {
+                  "x": 62,
+                  "y": 232
+                }
+              },
+              "confidence": 0,
+              "text": ""
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 214
+                },
+                "downRightPoint": {
+                  "x": 215,
+                  "y": 236
+                }
+              },
+              "confidence": 0.9994745394762825,
+              "text": "logischer Entwurf"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 285,
+                  "y": 221
+                },
+                "downRightPoint": {
+                  "x": 697,
+                  "y": 242
+                }
+              },
+              "confidence": 0.9831213734366677,
+              "text": "• Verwendung von konzeptuellen Datenmodellen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 124,
+                  "y": 242
+                },
+                "downRightPoint": {
+                  "x": 145,
+                  "y": 263
+                }
+              },
+              "confidence": 0.8483922481536865,
+              "text": "↓"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 299,
+                  "y": 247
+                },
+                "downRightPoint": {
+                  "x": 729,
+                  "y": 268
+                }
+              },
+              "confidence": 0.9846957010381362,
+              "text": "(z.B. ER-Modell, objektorientierte Modelle wie UML)"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 65,
+                  "y": 266
+                },
+                "downRightPoint": {
+                  "x": 204,
+                  "y": 287
+                }
+              },
+              "confidence": 0.9906601508458456,
+              "text": "Datendefinition"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 284,
+                  "y": 278
+                },
+                "downRightPoint": {
+                  "x": 644,
+                  "y": 300
+                }
+              },
+              "confidence": 0.9824834192121351,
+              "text": "• unabhängig von DBMS/Implementierung"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 48,
+                  "y": 318
+                },
+                "downRightPoint": {
+                  "x": 220,
+                  "y": 339
+                }
+              },
+              "confidence": 0.9997829430633121,
+              "text": "physischer Entwurf"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 248,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9830761677340457,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 405,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 501,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9723178707063198,
+              "text": "Datenbankentwurf"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 709,
+                  "y": 406
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9240844249725342,
+              "text": "13/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 31,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 14,
+                  "y": 14
+                },
+                "downRightPoint": {
+                  "x": 307,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9994356972830636,
+              "text": "Phasen des Datenbankentwurfs"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 38,
+                  "y": 110
+                },
+                "downRightPoint": {
+                  "x": 233,
+                  "y": 131
+                }
+              },
+              "confidence": 0.999904780011428,
+              "text": "Anforderungsanalyse"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 262,
+                  "y": 122
+                },
+                "downRightPoint": {
+                  "x": 438,
+                  "y": 143
+                }
+              },
+              "confidence": 0.9820279657840729,
+              "text": "3. Logischer Entwurf"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 34,
+                  "y": 162
+                },
+                "downRightPoint": {
+                  "x": 234,
+                  "y": 183
+                }
+              },
+              "confidence": 0.993603113151732,
+              "text": "konzeptueller Entwurf"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 286,
+                  "y": 154
+                },
+                "downRightPoint": {
+                  "x": 675,
+                  "y": 174
+                }
+              },
+              "confidence": 0.9808620240953233,
+              "text": "• Transformation in ein logisches Datenmodell"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 299,
+                  "y": 178
+                },
+                "downRightPoint": {
+                  "x": 640,
+                  "y": 199
+                }
+              },
+              "confidence": 0.9937180357101636,
+              "text": "(z.B. Relationenmodell, Netzwerkmodell,"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 123,
+                  "y": 190
+                },
+                "downRightPoint": {
+                  "x": 145,
+                  "y": 212
+                }
+              },
+              "confidence": 0.5415408611297607,
+              "text": "↓"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 32,
+                  "y": 213
+                },
+                "downRightPoint": {
+                  "x": 217,
+                  "y": 239
+                }
+              },
+              "confidence": 0.9700519652927623,
+              "text": "logischer Entwurf"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 299,
+                  "y": 204
+                },
+                "downRightPoint": {
+                  "x": 495,
+                  "y": 225
+                }
+              },
+              "confidence": 0.9979243847456846,
+              "text": "Hierarchisches Modell)"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 288,
+                  "y": 236
+                },
+                "downRightPoint": {
+                  "x": 666,
+                  "y": 257
+                }
+              },
+              "confidence": 0.9855663302269849,
+              "text": "• ggf. Verbesserung anhand von Gütekriterien"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 65,
+                  "y": 266
+                },
+                "downRightPoint": {
+                  "x": 204,
+                  "y": 287
+                }
+              },
+              "confidence": 0.9891595681508382,
+              "text": "Datendefinition"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 298,
+                  "y": 262
+                },
+                "downRightPoint": {
+                  "x": 469,
+                  "y": 283
+                }
+              },
+              "confidence": 0.9996110060635734,
+              "text": "(→Normalisierung)"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 282,
+                  "y": 292
+                },
+                "downRightPoint": {
+                  "x": 732,
+                  "y": 314
+                }
+              },
+              "confidence": 0.9776342032002467,
+              "text": "• Modell für die Implementierung, also abhängig vom"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 48,
+                  "y": 318
+                },
+                "downRightPoint": {
+                  "x": 218,
+                  "y": 339
+                }
+              },
+              "confidence": 0.9997787641154395,
+              "text": "physischer Entwurf"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 298,
+                  "y": 318
+                },
+                "downRightPoint": {
+                  "x": 358,
+                  "y": 340
+                }
+              },
+              "confidence": 0.9990493208169937,
+              "text": "DBMS"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 56,
+                  "y": 410
+                },
+                "downRightPoint": {
+                  "x": 247,
+                  "y": 425
+                }
+              },
+              "confidence": 0.980009094664925,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 404,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 501,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9874428473412991,
+              "text": "Datenbankentwurf"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 710,
+                  "y": 408
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9095678130785624,
+              "text": "14/ 16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 32,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 14,
+                  "y": 17
+                },
+                "downRightPoint": {
+                  "x": 307,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9997475040810448,
+              "text": "Phasen des Datenbankentwurfs"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 38,
+                  "y": 110
+                },
+                "downRightPoint": {
+                  "x": 235,
+                  "y": 131
+                }
+              },
+              "confidence": 0.9821702492864508,
+              "text": "Anforderungsanalyse"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 34,
+                  "y": 162
+                },
+                "downRightPoint": {
+                  "x": 235,
+                  "y": 183
+                }
+              },
+              "confidence": 0.9981372242882138,
+              "text": "konzeptueller Entwurf"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 262,
+                  "y": 174
+                },
+                "downRightPoint": {
+                  "x": 418,
+                  "y": 195
+                }
+              },
+              "confidence": 0.9644649393028684,
+              "text": "4. Datendefinition"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 122,
+                  "y": 190
+                },
+                "downRightPoint": {
+                  "x": 146,
+                  "y": 212
+                }
+              },
+              "confidence": 0.24667511880397797,
+              "text": "↓"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 33,
+                  "y": 213
+                },
+                "downRightPoint": {
+                  "x": 215,
+                  "y": 239
+                }
+              },
+              "confidence": 0.9949586251202751,
+              "text": "logischer Entwurf"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 285,
+                  "y": 206
+                },
+                "downRightPoint": {
+                  "x": 721,
+                  "y": 226
+                }
+              },
+              "confidence": 0.9892599654197692,
+              "text": "• Umsetzung des logischen Modells in ein konkretes"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 299,
+                  "y": 232
+                },
+                "downRightPoint": {
+                  "x": 460,
+                  "y": 253
+                }
+              },
+              "confidence": 0.9999528447786967,
+              "text": "Datenbankschema"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 63,
+                  "y": 266
+                },
+                "downRightPoint": {
+                  "x": 205,
+                  "y": 287
+                }
+              },
+              "confidence": 0.9993939240773518,
+              "text": "Datendefinition"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 284,
+                  "y": 262
+                },
+                "downRightPoint": {
+                  "x": 543,
+                  "y": 283
+                }
+              },
+              "confidence": 0.9698924954448428,
+              "text": "• basiert auf gewähltem DBMS"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 45,
+                  "y": 318
+                },
+                "downRightPoint": {
+                  "x": 220,
+                  "y": 340
+                }
+              },
+              "confidence": 0.9960242145591311,
+              "text": "physischer Entwurf"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 54,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 248,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9834856673290855,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 405,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 501,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9755259267985821,
+              "text": "Datenbankentwurf"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 709,
+                  "y": 406
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9994253993034363,
+              "text": "15/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    },
+    {
+      "pageNumber": 33,
+      "lines": [
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 14,
+                  "y": 17
+                },
+                "downRightPoint": {
+                  "x": 307,
+                  "y": 34
+                }
+              },
+              "confidence": 0.9997475040810448,
+              "text": "Phasen des Datenbankentwurfs"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 38,
+                  "y": 110
+                },
+                "downRightPoint": {
+                  "x": 235,
+                  "y": 131
+                }
+              },
+              "confidence": 0.9828224621321026,
+              "text": "Anforderungsanalyse"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 33,
+                  "y": 162
+                },
+                "downRightPoint": {
+                  "x": 236,
+                  "y": 184
+                }
+              },
+              "confidence": 0.9993012150128683,
+              "text": "konzeptueller Entwurf"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 262,
+                  "y": 175
+                },
+                "downRightPoint": {
+                  "x": 446,
+                  "y": 195
+                }
+              },
+              "confidence": 0.997703662940434,
+              "text": "5. Physischer Entwurf"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 33,
+                  "y": 213
+                },
+                "downRightPoint": {
+                  "x": 215,
+                  "y": 239
+                }
+              },
+              "confidence": 0.9950307116788977,
+              "text": "logischer Entwurf"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 284,
+                  "y": 206
+                },
+                "downRightPoint": {
+                  "x": 722,
+                  "y": 227
+                }
+              },
+              "confidence": 0.9716304435449488,
+              "text": "• Ergänzung der Definition um Zugriffsunterstützung"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 286,
+                  "y": 237
+                },
+                "downRightPoint": {
+                  "x": 659,
+                  "y": 257
+                }
+              },
+              "confidence": 0.9876686424016953,
+              "text": "• Verwendung von physische Datenmodellen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 63,
+                  "y": 266
+                },
+                "downRightPoint": {
+                  "x": 205,
+                  "y": 287
+                }
+              },
+              "confidence": 0.9997519930203755,
+              "text": "Datendefinition"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 300,
+                  "y": 263
+                },
+                "downRightPoint": {
+                  "x": 573,
+                  "y": 283
+                }
+              },
+              "confidence": 0.996845219284296,
+              "text": "Speicher- und Zugriffsstrukturen"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 35,
+                  "y": 318
+                },
+                "downRightPoint": {
+                  "x": 224,
+                  "y": 340
+                }
+              },
+              "confidence": 0.977466924322976,
+              "text": "physischer Entwurf"
+            }
+          ]
+        },
+        {
+          "boxes": [
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 56,
+                  "y": 410
+                },
+                "downRightPoint": {
+                  "x": 247,
+                  "y": 425
+                }
+              },
+              "confidence": 0.9821477375532451,
+              "text": "1. Einführung in grundlegende Konzepte"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 405,
+                  "y": 409
+                },
+                "downRightPoint": {
+                  "x": 501,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9452277384698391,
+              "text": "Datenbankentwurf"
+            },
+            {
+              "boundingBox": {
+                "upLeftPoint": {
+                  "x": 709,
+                  "y": 406
+                },
+                "downRightPoint": {
+                  "x": 756,
+                  "y": 426
+                }
+              },
+              "confidence": 0.9986006259918213,
+              "text": "16/16"
+            }
+          ]
+        }
+      ],
+      "bannerImgpath": "asante"
+    }
+  ],
+  "originalFilePath": "./tests/helpers/test.pdf",
+  "fileHash": "d43e3cdbf0e09a94d09007497cfd0dfa8d69a04e7cfb2ba8628c22fa29df757c"
+}

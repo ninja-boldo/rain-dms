@@ -139,8 +139,8 @@ server {
         proxy_pass \$auth_target;
 
         proxy_cache_valid 200 5m;
-        proxy_cache             auth_cache;
-        proxy_cache_key         "$http_x_auth_token$request_uri";
+        proxy_cache     auth_cache;
+        proxy_cache_key "\$http_authorization\$request_uri";
 
         proxy_ssl_verify off;
 
@@ -217,19 +217,19 @@ server {
     
     location /api/ {
         resolver 127.0.0.11 valid=10s;
-        set $node_backend "server:3000";
+        set \$node_backend "server:3000";
 
-        rewrite ^/api/(.*)$ /$1 break;
-        proxy_pass https://$node_backend;
+        rewrite ^/api/(.*)\$ /\$1 break;
+        proxy_pass https://\$node_backend;
 
         proxy_ssl_verify    off;
         proxy_http_version  1.1;
         proxy_set_header    Connection          "";
 
-        proxy_set_header    Host                $host;
-        proxy_set_header    X-Real-IP           $remote_addr;
-        proxy_set_header    X-Forwarded-For     $proxy_add_x_forwarded_for;
-        proxy_set_header    X-Forwarded-Proto   $scheme;
+        proxy_set_header    Host                \$host;
+        proxy_set_header    X-Real-IP           \$remote_addr;
+        proxy_set_header    X-Forwarded-For     \$proxy_add_x_forwarded_for;
+        proxy_set_header    X-Forwarded-Proto   \$scheme;
     }
 
     location /identify/self {

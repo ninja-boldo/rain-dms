@@ -30,18 +30,31 @@ export default function ErrorLogMenu() {
 
   const [open, setOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const DROPDOWN_WIDTH = 320;
 
   const unreadCount = errorLog.filter((e) => !e.read).length;
 
+  function computePos() {
+    if (!btnRef.current) return null;
+    const rect = btnRef.current.getBoundingClientRect();
+    // Anchor to the button's left edge and extend rightward, clamped so it
+    // never runs off either edge of the viewport. `right: innerWidth - rect.right`
+    // used to be assumed to sit near the right edge of the screen — but this
+    // button can live anywhere (e.g. the left sidebar), which pushed the
+    // dropdown back over whatever's to the left of it instead of opening
+    // next to the bell.
+    const left = Math.min(
+      Math.max(12, rect.left),
+      window.innerWidth - DROPDOWN_WIDTH - 12,
+    );
+    return { top: rect.bottom + 6, left };
+  }
+
   function toggle() {
-    if (!open && btnRef.current) {
-      const rect = btnRef.current.getBoundingClientRect();
-      setPos({
-        top: rect.bottom + 6,
-        right: Math.max(12, window.innerWidth - rect.right),
-      });
+    if (!open) {
+      setPos(computePos());
       markAllRead();
     }
     setOpen((v) => !v);
@@ -51,12 +64,7 @@ export default function ErrorLogMenu() {
   useEffect(() => {
     if (!open) return;
     function reposition() {
-      if (!btnRef.current) return;
-      const rect = btnRef.current.getBoundingClientRect();
-      setPos({
-        top: rect.bottom + 6,
-        right: Math.max(12, window.innerWidth - rect.right),
-      });
+      setPos(computePos());
     }
     window.addEventListener("resize", reposition);
     return () => window.removeEventListener("resize", reposition);
@@ -118,8 +126,8 @@ export default function ErrorLogMenu() {
               style={{
                 position: "fixed",
                 top: pos.top,
-                right: pos.right,
-                width: 320,
+                left: pos.left,
+                width: DROPDOWN_WIDTH,
                 maxWidth: "calc(100vw - 24px)",
                 maxHeight: "min(420px, calc(100vh - 80px))",
                 overflowY: "auto",

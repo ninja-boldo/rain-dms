@@ -25,4 +25,4 @@ for (const dir of dirs) {
 
 console.log("AMQP:", process.env.AMQP_URL);
 
-await Promise.all([new FileProcessor().init(tempFolder)]);
+await Promise.all([new FileProcessor().init(tempFolder, false, false)]);

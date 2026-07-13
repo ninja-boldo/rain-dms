@@ -4,7 +4,8 @@
 // either order, so this strips them in a loop rather than a single
 // fixed-order pass — a single pass left the uuid behind whenever the
 // timestamp suffix came after it.
-const UUID_SUFFIX = /-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+const UUID_SUFFIX =
+  /-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
 const TIMESTAMP_SUFFIX =
   /-\d{4}-\d{2}-\d{2}[T_]\d{2}[:\-]\d{2}[:\-]\d{2}(?:\.\d+)?Z?$/i;
 

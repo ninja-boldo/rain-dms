@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getDashboard } from "../api/client";
-import {
-  useAllReminders,
-  markReminderDone,
-  type GlobalReminder,
-} from "../store/localData";
+import { useAllReminders, useAllMarkers } from "../store/localData";
 import { useI18n } from "../i18n";
 import { cleanFileName } from "../utils/filename";
 
@@ -338,79 +334,6 @@ function Section({
   );
 }
 
-function ReminderRow({
-  reminder,
-  onOpen,
-}: {
-  reminder: GlobalReminder;
-  onOpen: (path: string) => void;
-}) {
-  const t = useI18n();
-  const name = reminder.filepath.split("/").pop() ?? reminder.filepath;
-  const isOverdue = reminder.at
-    ? new Date(reminder.at).getTime() < Date.now()
-    : false;
-
-  return (
-    <div
-      className="card-sm"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "8px 12px",
-      }}
-    >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p
-          style={{
-            margin: 0,
-            fontSize: "0.78rem",
-            fontWeight: 600,
-            color: "var(--text-1)",
-            fontFamily: "JetBrains Mono, monospace",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-          title={reminder.filepath}
-        >
-          {name}
-        </p>
-        <p
-          style={{
-            margin: "2px 0 0",
-            fontSize: "0.68rem",
-            color: isOverdue ? "var(--danger)" : "var(--text-3)",
-          }}
-        >
-          {reminder.at
-            ? new Date(reminder.at).toLocaleString()
-            : t.st_reminderNoDate}
-          {isOverdue && ` · ${t.st_reminderOverdue}`}
-          {reminder.note ? ` · ${reminder.note}` : ""}
-        </p>
-      </div>
-      <button
-        className="btn btn-ghost"
-        style={{ fontSize: "0.7rem", padding: "3px 9px", flexShrink: 0 }}
-        onClick={() => markReminderDone(reminder.filepath)}
-      >
-        {t.st_reminderMarkDone}
-      </button>
-      <button
-        className="btn btn-ghost"
-        style={{ fontSize: "0.7rem", padding: "3px 9px", flexShrink: 0 }}
-        onClick={() =>
-          onOpen(`/document?filepath=${encodeURIComponent(reminder.filepath)}`)
-        }
-      >
-        {t.st_reminderOpenFile}
-      </button>
-    </div>
-  );
-}
-
 export default function StatsPage() {
   const t = useI18n();
   const [data, setData] = useState<any>(null);
@@ -470,21 +393,20 @@ export default function StatsPage() {
   const sparklineDaily: number[] = s.sparkline_daily_30d ?? [];
   const topTags: { tag: string; doc_count: number }[] = s.top_tags ?? [];
   const ingestDuration = s.ingest_duration ?? null;
-  const byExt: Record<string, number> = s.by_extension ?? {};
+  const byExtRaw: Record<string, number> = s.by_extension ?? {};
+  const byExt: Record<string, number> = {};
+  for (const [rawExt, count] of Object.entries(byExtRaw)) {
+    const normalized = rawExt.replace(/^\.+/, "") || rawExt;
+    byExt[normalized] = (byExt[normalized] ?? 0) + count;
+  }
   const biggestFiles: any[] = s.biggest_files ?? [];
   const downloads = data?.downloads ?? {};
   const downloadWorkers: any[] = downloads.workers ?? [];
 
   const nav = useNavigate();
   const allReminders = useAllReminders();
-  const pendingReminders = allReminders
-    .filter((r) => !r.done_at)
-    .sort((a, b) => {
-      if (!a.at && !b.at) return 0;
-      if (!a.at) return 1;
-      if (!b.at) return -1;
-      return new Date(a.at).getTime() - new Date(b.at).getTime();
-    });
+  const allMarkers = useAllMarkers();
+  const pendingReminders = allReminders.filter((r) => !r.done_at);
 
   // Estimated avg webp size — based on page count assumption
   const avgWebpKb =
@@ -559,28 +481,29 @@ export default function StatsPage() {
         </div>
       )}
 
-      {/* Pending reminders — aggregated across every file's local reminder.
-          Always visible (even empty) so it's actually discoverable. */}
-      <Section
-        label={
-          pendingReminders.length > 0
-            ? `${t.st_reminders} (${pendingReminders.length})`
-            : t.st_reminders
-        }
-        defaultOpen={true}
-      >
-        {pendingReminders.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {pendingReminders.map((r) => (
-              <ReminderRow key={r.filepath} reminder={r} onOpen={nav} />
-            ))}
-          </div>
-        ) : (
-          <p style={{ margin: 0, fontSize: "0.76rem", color: "var(--text-3)" }}>
-            {t.st_remindersEmpty}
-          </p>
-        )}
-      </Section>
+      {/* Reminders and markers now live on their own page — see nav. */}
+      {(pendingReminders.length > 0 || allMarkers.length > 0) && (
+        <div
+          className="card-sm"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "8px 12px",
+            marginBottom: 18,
+            cursor: "pointer",
+          }}
+          onClick={() => nav("/markers")}
+        >
+          <span style={{ fontSize: "0.76rem", color: "var(--text-2)" }}>
+            {t.st_reminders}: {pendingReminders.length} · {t.mm_markers}:{" "}
+            {allMarkers.length}
+          </span>
+          <span style={{ fontSize: "0.72rem", color: "var(--accent)" }}>
+            {t.mm_title} →
+          </span>
+        </div>
+      )}
 
       {/* Documents */}
       <Section label={t.st_documents}>

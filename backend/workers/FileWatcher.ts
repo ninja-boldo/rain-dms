@@ -73,7 +73,9 @@ async function processFile(
 
   const isToEncrypt = getEncryptAtRestIsTrue();
   const originalConsumePath = filePath;
+
   const usernameBoundToFile = await getUsernameFromConsumeDbChecked(filePath);
+  console.log(`checked for filepath: ${filePath} and got this result: ${usernameBoundToFile}`)
   const spawnTime = new Date().toISOString();
 
   let finalPath = filePath;

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useSettingsStore } from "../store/settings";
 import { searchDocuments } from "../api/client";
 import type { SearchResponse } from "../api/client";
 import AuthImage from "../components/AuthImage";
@@ -95,6 +94,7 @@ function FileGroup({
   onJump: (hit: Hit, idx: number) => void;
 }) {
   const t = useI18n();
+  const nav = useNavigate();
   const name = cleanFileName(filepath);
   const firstHit = hits[0];
 
@@ -146,7 +146,7 @@ function FileGroup({
             {name}
           </p>
           <p style={{ margin: 0, fontSize: "0.63rem", color: "var(--text-3)" }}>
-            {hits.length} hit{hits.length !== 1 ? "s" : ""} ·{" "}
+            {t.sr_hitsCount(hits.length)} ·{" "}
             {filepath.split("/").slice(0, -1).join("/")}
           </p>
         </div>
@@ -167,6 +167,27 @@ function FileGroup({
             ))}
           </div>
         )}
+        <button
+          title={t.ft_openStats}
+          onClick={(e) => {
+            e.stopPropagation();
+            nav(`/file-stats?filepath=${encodeURIComponent(filepath)}`);
+          }}
+          style={{
+            flexShrink: 0,
+            background: "transparent",
+            border: "1px solid var(--border)",
+            color: "var(--text-3)",
+            borderRadius: 4,
+            width: 22,
+            height: 22,
+            cursor: "pointer",
+            fontSize: "0.8rem",
+            lineHeight: 1,
+          }}
+        >
+          ⎙
+        </button>
       </div>
 
       {/* Hit rows */}
@@ -309,7 +330,7 @@ function FlatHit({
       }
       onClick={onJump}
     >
-      {hit.pageIdx === 0 && hit.banner_img && (
+      {hit.banner_img && (
         <div
           style={{
             width: 56,
@@ -371,7 +392,7 @@ function FlatHit({
             {name}
           </p>
           <button
-            title="Full path"
+            title={t.sr_fullPath}
             onClick={(e) => {
               e.stopPropagation();
               setShowPath((v) => !v);
@@ -518,7 +539,7 @@ export default function SearchPage() {
     "relevance" | "newest" | "oldest" | "biggest" | "smallest"
   >("relevance");
   const [grouped, setGrouped] = useState(true);
-  const apiUrl = useSettingsStore((s) => s.apiUrl);
+  const [filenameOnly, setFilenameOnly] = useState(false);
 
   const RECENT_KEY = "rain-dms-recent-searches";
   const [recent, setRecent] = useState<string[]>(() => {
@@ -551,13 +572,10 @@ export default function SearchPage() {
     }
   }
 
-  // Construct proper banner URL — search hits have raw filenames from MeiliSearch
-  function resolveBannerUrl(raw: string | null | undefined): string | null {
-    if (!raw) return null;
-    if (/^https?:\/\//i.test(raw)) return raw; // already absolute
-    // Route through authenticated download endpoint
-    return `${apiUrl}/download?fileKey=${encodeURIComponent(raw)}`;
-  }
+  // Search hits carry raw S3 keys for banner_img (same shape DocumentPage
+  // gets from /pages) — AuthImage resolves + fetches them itself, so no
+  // pre-resolution needed here. (Previously this built a /download?fileKey=
+  // URL instead, which routed through a different, inconsistent code path.)
 
   // Keyboard shortcut: / to focus search
   useEffect(() => {
@@ -584,12 +602,7 @@ export default function SearchPage() {
     const effective = q.trim();
     const tagsToUse = overrides?.tags ?? selectedTags;
     const sortToUse = overrides?.sort ?? sortBy;
-    if (
-      !effective &&
-      !createdAfter &&
-      !createdBefore &&
-      tagsToUse.length === 0
-    )
+    if (!effective && !createdAfter && !createdBefore && tagsToUse.length === 0)
       return;
     setLoading(true);
     setError(null);
@@ -638,28 +651,40 @@ export default function SearchPage() {
     ? Object.entries(result.tag_facets).sort((a, b) => b[1] - a[1])
     : [];
 
-  const hits: Hit[] = (result?.hits ?? []).map((h: any) => {
-    const fText: string | undefined = h._formatted?.searchable_text;
-    const fPath: string | undefined = h._formatted?.filepath;
-    const fTags: string[] | undefined = h._formatted?.assigned_tags;
-    let matchedIn: Hit["matchedIn"] = "other";
-    if (hasHighlight(fText)) matchedIn = "content";
-    else if (hasHighlight(fPath)) matchedIn = "filename";
-    else if (fTags?.some(hasHighlight)) matchedIn = "tag";
-    return {
-      filepath: h.filepath,
-      pageIdx:
-        typeof h.pageIdx === "string" ? parseInt(h.pageIdx, 10) : h.pageIdx,
-      fileId: h.file_id,
-      banner_img: resolveBannerUrl(h.banner_img) ?? undefined,
-      assigned_tags: h.assigned_tags,
-      searchable_text: h.searchable_text,
-      formatted_text: fText,
-      formatted_filepath: fPath,
-      formatted_tags: fTags,
-      matchedIn,
-    };
-  });
+  const hits: Hit[] = (result?.hits ?? [])
+    .map((h: any) => {
+      const fText: string | undefined = h._formatted?.searchable_text;
+      const fPath: string | undefined = h._formatted?.filepath;
+      const fTags: string[] | undefined = h._formatted?.assigned_tags;
+      let matchedIn: Hit["matchedIn"] = "other";
+      if (hasHighlight(fText)) matchedIn = "content";
+      else if (hasHighlight(fPath)) matchedIn = "filename";
+      else if (fTags?.some(hasHighlight)) matchedIn = "tag";
+      return {
+        filepath: h.filepath,
+        pageIdx:
+          typeof h.pageIdx === "string" ? parseInt(h.pageIdx, 10) : h.pageIdx,
+        fileId: h.file_id,
+        banner_img: h.banner_img || undefined,
+        assigned_tags: h.assigned_tags,
+        searchable_text: h.searchable_text,
+        formatted_text: fText,
+        formatted_filepath: fPath,
+        formatted_tags: fTags,
+        matchedIn,
+      };
+    })
+    .filter((hit) => {
+      if (!filenameOnly) return true;
+      const q = query.trim().toLowerCase();
+      if (!q) return true;
+      // Match against the UUID/timestamp-stripped display name, not the raw
+      // S3 key — otherwise a query that happens to be a substring of the
+      // synthetic suffix (e.g. a stray hex fragment) would produce
+      // false-positive "filename" matches with no relation to what the
+      // person actually typed.
+      return cleanFileName(hit.filepath).toLowerCase().includes(q);
+    });
 
   // Group hits by file
   const groupedHits = useMemo(() => {
@@ -900,11 +925,11 @@ export default function SearchPage() {
                 }}
                 style={{ fontSize: "0.72rem", padding: "4px 8px" }}
               >
-                <option value="relevance">Relevance</option>
-                <option value="newest">Newest first</option>
-                <option value="oldest">Oldest first</option>
-                <option value="biggest">Biggest first</option>
-                <option value="smallest">Smallest first</option>
+                <option value="relevance">{t.sr_sortRelevance}</option>
+                <option value="newest">{t.sr_sortNewest}</option>
+                <option value="oldest">{t.sr_sortOldest}</option>
+                <option value="biggest">{t.sr_sortBiggest}</option>
+                <option value="smallest">{t.sr_sortSmallest}</option>
               </select>
             </div>
             {/* Group toggle */}
@@ -928,6 +953,31 @@ export default function SearchPage() {
                 title={grouped ? t.sr_flat : t.sr_groupByFile}
               >
                 {grouped ? t.sr_flat : t.sr_groupByFile}
+              </button>
+            </div>
+            {/* Filename-only toggle — matches against the UUID/timestamp-
+                stripped display name, not the raw searchable_text/tags, so
+                results are restricted to what's actually in the filename. */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "flex-end",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setFilenameOnly((v) => !v)}
+                className="btn btn-ghost"
+                style={{
+                  fontSize: "0.72rem",
+                  padding: "4px 9px",
+                  borderColor: filenameOnly ? "var(--accent)" : undefined,
+                  color: filenameOnly ? "var(--accent)" : undefined,
+                }}
+                title={t.sr_filenameOnlyHint}
+              >
+                {t.sr_filenameOnly}
               </button>
             </div>
           </div>
@@ -968,7 +1018,7 @@ export default function SearchPage() {
                     color: "var(--accent)",
                     background: "var(--accent-glow)",
                   }}
-                  title="Remove filter"
+                  title={t.sr_removeFilter}
                 >
                   {tag} ✕
                 </button>
@@ -1022,7 +1072,8 @@ export default function SearchPage() {
                   <>
                     {" "}
                     · sorted by {result.sort}
-                    {result.sort_applied === false && " (unavailable, showing relevance order)"}
+                    {result.sort_applied === false &&
+                      " (unavailable, showing relevance order)"}
                   </>
                 )}
                 {result.excludedTerms.length > 0 && (

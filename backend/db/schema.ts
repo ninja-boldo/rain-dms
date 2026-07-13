@@ -39,7 +39,7 @@ export const documentsTable = pgTable(
     fileS3Key: text("file_s3_key").notNull(),
     createdAt: timestamp("created_at").defaultNow(),
     assigned_tags: text("assigned_tags").array(),
-    spawnedInPipelineIso: text("spawned_in_pipeline_iso").notNull(),
+    spawnedInPipelineIso: timestamp("spawned_in_pipeline_iso").notNull(),
     fileHash: text("file_hash").notNull().unique(),
     encryption_key: text("encryption_key"),
     pageCount: integer().notNull().default(0),

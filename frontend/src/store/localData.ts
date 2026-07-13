@@ -16,6 +16,9 @@ export interface LocalReminder {
   at: string | null;
   note: string | null;
   done_at: string | null;
+  /** When the reminder was set. Optional so reminders saved before this
+   * field existed still load fine — the UI just shows "unknown" for those. */
+  created_at?: string | null;
 }
 
 const STORE_KEY = "rain-dms-local";
@@ -56,6 +59,53 @@ function save(s: Store) {
   } catch {
     // quota exceeded — best effort
   }
+}
+
+export interface GlobalMarker extends LocalMarker {
+  filepath: string;
+}
+
+/** All markers across every file, for a global "markers" view. */
+export function getAllMarkers(): GlobalMarker[] {
+  const s = load();
+  return Object.entries(s.markers).flatMap(([filepath, markers]) =>
+    markers.map((m) => ({ filepath, ...m })),
+  );
+}
+
+export function useAllMarkers(): GlobalMarker[] {
+  const [markers, setMarkers] = useState<GlobalMarker[]>(() => getAllMarkers());
+
+  useEffect(() => {
+    function refresh() {
+      setMarkers(getAllMarkers());
+    }
+    window.addEventListener("storage", refresh);
+    window.addEventListener(CHANGE_EVENT, refresh);
+    return () => {
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener(CHANGE_EVENT, refresh);
+    };
+  }, []);
+
+  return markers;
+}
+
+/** Remove a single marker from anywhere, without mounting a per-file hook. */
+export function deleteMarkerGlobal(filepath: string, boxKey: string) {
+  const s = load();
+  const existing = s.markers[filepath];
+  if (!existing) return;
+  const next = existing.filter((m) => m.box_key !== boxKey);
+  save({
+    ...s,
+    markers:
+      next.length > 0
+        ? { ...s.markers, [filepath]: next }
+        : Object.fromEntries(
+            Object.entries(s.markers).filter(([fp]) => fp !== filepath),
+          ),
+  });
 }
 
 export interface GlobalReminder extends LocalReminder {

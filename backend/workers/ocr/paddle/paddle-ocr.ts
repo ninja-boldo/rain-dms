@@ -14,17 +14,24 @@ import {
 import {
   PaddleOcrResult,
   PaddleOcrService,
+  V6_MEDIUM_MODEL,
   V6_TINY_MODEL,
 } from "ppu-paddle-ocr";
 import { ImageHandler } from "../ImageHandler";
-import { chunkArray } from "../../../utils/other/utils";
+import { chunkArray, mockS3Obj, mockS3Objs } from "../../../utils/other/utils";
 import { printOcrStats } from "../../../utils/other/debuggingHelpers";
 const cliProgress = require("cli-progress");
 import os from "os";
 
 export class PaddleJsOcr extends BaseOcrProcessor {
+  private modelUsed: Readonly<{
+    detection: string;
+    recognition: string;
+    charactersDictionary: string;
+  }> = V6_TINY_MODEL;
+
   protected service = new PaddleOcrService({
-    model: V6_TINY_MODEL,
+    model: this.modelUsed,
     debugging: {
       debug: false,
       verbose: false,
@@ -41,6 +48,7 @@ export class PaddleJsOcr extends BaseOcrProcessor {
   protected IMG_DPI: number = 120;
   protected ImageHandler: ImageHandler;
   protected lastInferenceStart: Date;
+  protected localDevMode: boolean;
   protected verboseStats: boolean;
   protected progressBar = new cliProgress.SingleBar(
     {},
@@ -61,22 +69,31 @@ export class PaddleJsOcr extends BaseOcrProcessor {
 
   constructor(
     protected readonly tempFolder: string,
+    localDevMode: boolean = false,
     verboseStats: boolean = false,
   ) {
     super(tempFolder);
+
     this.ImageHandler = new ImageHandler(tempFolder, this.IMG_DPI);
     this.lastInferenceStart = new Date();
+    this.localDevMode = localDevMode;
     this.verboseStats = verboseStats;
     console.log(`using ${this.numProcesses} workers`);
   }
 
   async init() {
     await this.service.initialize();
-    await this.ImageHandler.init();
+    if (this.localDevMode === false) {
+      await this.ImageHandler.init();
+    } else {
+      console.warn(
+        "running in local dev mode and therefore not interacting with s3(doesnt down or upload)",
+      );
+    }
   }
 
   checkImageHandler() {
-    if (this.ImageHandler === null) {
+    if (this.ImageHandler === null && this.localDevMode === false) {
       throw Error("failed to init Image Handler");
     }
   }
@@ -105,6 +122,7 @@ export class PaddleJsOcr extends BaseOcrProcessor {
     );
     return results as PaddleOcrResult[];
   }
+
   protected async ocrImageChunk(
     imgPaths: string[],
   ): Promise<PaddleOcrResult[]> {
@@ -119,10 +137,10 @@ export class PaddleJsOcr extends BaseOcrProcessor {
     }
 
     const threadsPerProcess = 1;
-
     const shardResults = await Promise.all(
       shards.map(async (shard, idx) => {
         const outFile = `${this.tempFolder}/shard-${idx}-${Date.now()}.json`;
+
         const proc = Bun.spawn(
           [
             "bun",
@@ -132,17 +150,31 @@ export class PaddleJsOcr extends BaseOcrProcessor {
             idx.toString(),
             outFile,
             threadsPerProcess.toString(),
+            JSON.stringify(this.modelUsed),
           ],
           { stdout: "inherit", stderr: "inherit" },
         );
+
         await proc.exited;
+
         const raw = await Bun.file(outFile).text();
         await fs.rm(outFile, { force: true }).catch(() => {});
-        return JSON.parse(raw) as PaddleOcrResult[];
+
+        return {
+          idx,
+          result: JSON.parse(raw) as PaddleOcrResult[],
+        };
       }),
     );
 
-    return shardResults.flat();
+    const orderedShards: PaddleOcrResult[][] = [];
+
+    for (const { idx, result } of shardResults) {
+      orderedShards[idx] = result;
+    }
+
+    console.log("shardResults: ", JSON.stringify(shardResults));
+    return orderedShards.flat();
   }
 
   protected async cleanup(filePath: string, rmFile: boolean) {
@@ -183,7 +215,9 @@ export class PaddleJsOcr extends BaseOcrProcessor {
       );
       const res: PaddleOcrResult = await this.ocrImage(webpImgPath);
       const s3Obj: S3ReturnObj =
-        await this.ImageHandler.uploadToS3Single(webpImgPath);
+        this.localDevMode === false
+          ? await this.ImageHandler.uploadToS3Single(webpImgPath)
+          : mockS3Obj();
 
       const ocrRes: OcrResult = {
         pages: [PaddleOcrResToPageOcr(res, s3Obj.s3Key, 0)],
@@ -220,7 +254,10 @@ export class PaddleJsOcr extends BaseOcrProcessor {
       }
 
       const s3Objs: S3ReturnObj[] =
-        await this.ImageHandler.uploadToS3Many(imgPaths);
+        this.localDevMode === false
+          ? await this.ImageHandler.uploadToS3Many(imgPaths)
+          : mockS3Objs(imgPaths.length);
+
       const mapping: Map<PaddleOcrResult, S3ReturnObj> = createOcrMapping(
         rawResults,
         s3Objs,

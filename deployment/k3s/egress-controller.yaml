@@ -1,41 +1,22 @@
-apiVersion: crd.projectcalico.org/v1
-kind: GlobalNetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
-  name: deny-app-policy
+  name: deny-app-egress
+  namespace: default
 spec:
-  namespaceSelector: '!has(projectcalico.org/name) || (projectcalico.org/name not in {"calico-system", "kube-public", "kube-system", "tigera-operator"})'
-  types:
+  podSelector:
+    matchLabels:
+      app: queue-processor   # Match the label used by the deployment
+  policyTypes:
     - Egress
-
   egress:
-    # Allow all namespaces to communicate with DNS pods (UDP)
-    - action: Allow
-      protocol: UDP
-      destination:
-        selector: 'k8s-app == "kube-dns"'
-        ports:
-          - 53
-
-    # Allow all namespaces to communicate with DNS pods (TCP)
-    - action: Allow
-      protocol: TCP
-      destination:
-        selector: 'k8s-app == "kube-dns"'
-        ports:
-          - 53
-
-    # Allow TCP traffic to local LAN
-    # Example: HTTP, HTTPS, SSH, databases, etc.
-    - action: Allow
-      protocol: TCP
-      destination:
-        nets:
-          - 192.168.1.0/24
-
-    # Allow UDP traffic to local LAN
-    # Example: DNS, NTP, discovery protocols, etc.
-    - action: Allow
-      protocol: UDP
-      destination:
-        nets:
-          - 192.168.1.0/24
+    # 1. Allow DNS lookups (UDP and TCP on port 53)
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # 2. Allow local subnet (e.g. 192.168.1.0/24)
+    - to:
+        - ipBlock:
+            cidr: 192.168.1.0/24

@@ -12,19 +12,13 @@ import {
 export function createOcrMapping(
   results: PaddleOcrResult[],
   s3Keys: S3ReturnObj[],
-): Map<PaddleOcrResult, S3ReturnObj> {
+): Array<{ result: PaddleOcrResult; s3Obj: S3ReturnObj }> {
   if (results.length !== s3Keys.length) {
     throw Error(
-      `results array (length ${results.length}) isnt the same length as the the s3 keys array (length ${s3Keys.length})`,
+      `results array (length ${results.length}) isnt the same length as the s3 keys array (length ${s3Keys.length})`,
     );
   }
-  const mapping = new Map<PaddleOcrResult, S3ReturnObj>();
-
-  for (let i = 0; i < results.length; i++) {
-    mapping.set(results[i], s3Keys[i]);
-  }
-
-  return mapping;
+  return results.map((result, i) => ({ result, s3Obj: s3Keys[i] }));
 }
 
 function convertPaddleBoxToCustom(box: Box): BoundingBoxOcr {
@@ -61,18 +55,12 @@ export function PaddleOcrResToPageOcr(
 }
 
 export function PaddleOcrResultsToOcrRes(
-  mapping: Map<PaddleOcrResult, S3ReturnObj>,
+  mapping: Array<{ result: PaddleOcrResult; s3Obj: S3ReturnObj }>,
   info: FileInfo,
 ): OcrResult {
-  const pages: PageOcr[] = [];
-  let pageIndex = 0;
-
-  for (const [rawResult, s3Obj] of mapping) {
-    const page = PaddleOcrResToPageOcr(rawResult, s3Obj.s3Key, pageIndex);
-    pages.push(page);
-    pageIndex++;
-  }
-
+  const pages: PageOcr[] = mapping.map(({ result, s3Obj }, pageIndex) =>
+    PaddleOcrResToPageOcr(result, s3Obj.s3Key, pageIndex),
+  );
   return {
     pages,
     originalFilePath: info.originalFilePath,

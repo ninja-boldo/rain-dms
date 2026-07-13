@@ -133,14 +133,24 @@ import type {
   TagEntry,
 } from "./types";
 
+export type MainPageSort =
+  | "date_desc"
+  | "date_asc"
+  | "pages_desc"
+  | "pages_asc"
+  | "name_asc"
+  | "name_desc";
+
 export async function getMainPage(
   pageIdx = 0,
   limit = 50,
   tag?: string,
+  sort: MainPageSort = "date_desc",
 ): Promise<MainPageResponse> {
   const p = new URLSearchParams({
     pageIdx: String(pageIdx),
     limit: String(limit),
+    sort,
   });
   if (tag) p.set("tag", tag);
 

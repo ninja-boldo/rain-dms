@@ -44,13 +44,12 @@ export class ImageHandler {
     imgPaths: string[],
     inplace: boolean = this.convertWebpInplace,
   ): Promise<string[]> {
-    const webpPaths: string[] = [];
-    await Promise.all(
+    const webpPaths: string[] = await Promise.all(
       imgPaths.map(async (filePath) => {
-        const webpPath = await imgToWebp(filePath, inplace, this.webpQuality);
-        webpPaths.push(webpPath);
+        return await imgToWebp(filePath, inplace, this.webpQuality);
       }),
     );
+
     this.openImgPaths.push(...webpPaths);
     return webpPaths;
   }

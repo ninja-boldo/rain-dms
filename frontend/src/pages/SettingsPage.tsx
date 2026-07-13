@@ -230,12 +230,8 @@ export default function SettingsPage() {
         </Row>
       </Section>
 
-      <Section title="Upload filters">
-        <Row
-          label="Allowed file extensions"
-          sub="Only files with these extensions will be accepted. One per line (with dot). Clear to disable filter."
-          last
-        >
+      <Section title={t.st_uploadFilters}>
+        <Row label={t.st_allowedExt} sub={t.st_allowedExtSub} last>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <textarea
               className="input"
@@ -253,7 +249,7 @@ export default function SettingsPage() {
                   .filter((l) => l.startsWith("."));
                 setAllowedUploadExtensions(lines);
               }}
-              placeholder=".pdf&#10;.png&#10;.jpg"
+              placeholder={".pdf\n.png\n.jpg"}
             />
             <div style={{ display: "flex", gap: 5 }}>
               <button
@@ -263,36 +259,36 @@ export default function SettingsPage() {
                   setAllowedUploadExtensions(DEFAULT_ALLOWED_EXTENSIONS)
                 }
               >
-                Reset to defaults
+                {t.st_resetDefaults}
               </button>
               <button
                 className="btn btn-ghost"
                 style={{ fontSize: "0.72rem" }}
                 onClick={() => setAllowedUploadExtensions([])}
               >
-                Clear (block-list mode)
+                {t.st_blockMode}
               </button>
             </div>
             <p
               style={{ margin: 0, fontSize: "0.66rem", color: "var(--text-3)" }}
             >
-              Current:{" "}
-              {allowedUploadExtensions.length
-                ? allowedUploadExtensions.join(" ")
-                : "using built-in block-list"}
+              {t.st_current(
+                allowedUploadExtensions.join(" "),
+                t.st_currentFallback,
+              )}
             </p>
           </div>
         </Row>
       </Section>
 
-      <Section title="Appearance">
-        <Row label="Theme" sub={`Currently ${theme} mode`}>
+      <Section title={t.st_appearance}>
+        <Row label={t.st_theme} sub={t.st_themeSub(theme)}>
           <button
             className="btn btn-ghost"
             onClick={toggleTheme}
             style={{ fontSize: "0.78rem" }}
           >
-            {theme === "dark" ? "☀ Light" : "☾ Dark"}
+            {theme === "dark" ? t.st_lightBtn : t.st_darkBtn}
           </button>
         </Row>
         <div style={{ padding: "12px 14px" }}>
@@ -512,7 +508,7 @@ export default function SettingsPage() {
               fontWeight: 500,
             }}
           >
-            Virtual folder paths
+            {t.st_simulatedPaths}
           </p>
           <p
             style={{
@@ -522,21 +518,12 @@ export default function SettingsPage() {
               lineHeight: 1.5,
             }}
           >
-            Enter one tag path per line. Use{" "}
-            <span className="mono" style={{ color: "var(--text-2)" }}>
-              /
-            </span>{" "}
-            to nest folders, e.g.{" "}
-            <span className="mono" style={{ color: "var(--text-2)" }}>
-              Finance/2024/Q1
-            </span>
-            . These appear as <em>italic</em> ghost folders in the tag tree —
-            useful for planning your structure without touching any documents.
+            {t.st_simulatedHint}
           </p>
           <textarea
             value={simDraft}
             onChange={(e) => setSimDraft(e.target.value)}
-            placeholder={"Finance/2024/Q1\nLegal/Contracts\nHR/Onboarding"}
+            placeholder={t.st_simulatedExample}
             rows={5}
             style={{
               width: "100%",
@@ -569,7 +556,7 @@ export default function SettingsPage() {
                   setSimulatedTagPaths([]);
                 }}
               >
-                Clear
+                {t.st_clear}
               </button>
             )}
             <button
@@ -577,7 +564,7 @@ export default function SettingsPage() {
               style={{ fontSize: "0.75rem" }}
               onClick={saveSimulated}
             >
-              {simSaved ? "✓ Saved" : "Apply"}
+              {simSaved ? t.st_saved : t.st_apply}
             </button>
           </div>
           {simulatedTagPaths.length > 0 && (
@@ -588,28 +575,22 @@ export default function SettingsPage() {
                 color: "var(--text-3)",
               }}
             >
-              {simulatedTagPaths.length} simulated path
-              {simulatedTagPaths.length !== 1 ? "s" : ""} active. Switch to Tree
-              → By tags in Documents to preview.
+              {t.st_simulatedActive(simulatedTagPaths.length)}
             </p>
           )}
         </div>
       </Section>
 
-      <Section title="Document viewer">
-        <Row
-          label="Load OCR by default"
-          sub="On: full OCR text/bounding boxes fetch as soon as a document opens (needed for instant search-hit jumping, but can be slow on very long documents). Off: pages load instantly and OCR is fetched lazily as you scroll, or on demand via the OCR button in a document."
-          last
-        >
+      <Section title={t.st_docViewer}>
+        <Row label={t.st_loadOcrDefault} sub={t.st_loadOcrDefaultSub} last>
           <Toggle value={loadOcrByDefault} onChange={setLoadOcrByDefault} />
         </Row>
       </Section>
 
       {/* Connection */}
-      <Section title="Connection">
+      <Section title={t.st_connection}>
         <div style={{ padding: "12px 14px" }}>
-          <label className="label">API base URL</label>
+          <label className="label">{t.st_apiUrl}</label>
           <div style={{ display: "flex", gap: 7, marginTop: 4 }}>
             <input
               className="input"
@@ -627,7 +608,7 @@ export default function SettingsPage() {
               onClick={saveApi}
               style={{ flexShrink: 0, fontSize: "0.78rem" }}
             >
-              {saved ? "✓" : "Save"}
+              {saved ? "✓" : t.st_apply}
             </button>
           </div>
           <p
@@ -637,11 +618,7 @@ export default function SettingsPage() {
               color: "var(--text-3)",
             }}
           >
-            Auto-detected from{" "}
-            <span className="mono" style={{ color: "var(--text-2)" }}>
-              {window.location.origin}/api
-            </span>{" "}
-            on first load.
+            {t.st_apiUrlHint(window.location.origin)}
           </p>
         </div>
       </Section>

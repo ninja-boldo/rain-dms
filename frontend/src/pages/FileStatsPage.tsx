@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { getDocument, getPages } from "../api/client";
+import { getDocument, getPages, getStats } from "../api/client";
 import type { Document } from "../api/client";
 import { useLocalStore, type LocalMarker } from "../store/localData";
 import { useI18n } from "../i18n";
@@ -58,6 +58,18 @@ function fmtDuration(
   return `${Math.floor(diffMs / 3_600_000)}h ${Math.floor((diffMs % 3_600_000) / 60_000)}m`;
 }
 
+function diffSeconds(
+  fromIso: string | null | undefined,
+  toIso: string | null | undefined,
+): number | null {
+  if (!fromIso || !toIso) return null;
+  const from = new Date(fromIso).getTime();
+  const to = new Date(toIso).getTime();
+  if (Number.isNaN(from) || Number.isNaN(to)) return null;
+  const diffMs = to - from;
+  return diffMs >= 0 ? diffMs / 1000 : null;
+}
+
 interface Stats {
   doc: Document | null;
   pageCount: number;
@@ -105,16 +117,29 @@ export default function FileStatsPage() {
   const [error, setError] = useState<string | null>(null);
   const [reminderDraft, setReminderDraft] = useState("");
   const [reminderNote, setReminderNote] = useState("");
+  const [sysIngestAvgSec, setSysIngestAvgSec] = useState<number | null>(null);
 
   const { markers, reminder, setMarkers, setReminder } = useLocalStore(
     filepath || null,
   );
 
   useEffect(() => {
+    getStats()
+      .then((s: any) => {
+        const avg = s?.ingest_duration?.avg_seconds;
+        if (typeof avg === "number" && avg > 0) setSysIngestAvgSec(avg);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (!filepath) return;
     setLoading(true);
     setError(null);
-    Promise.all([getDocument(filepath), getPages(filepath, { includeOcr: true })])
+    Promise.all([
+      getDocument(filepath),
+      getPages(filepath, { includeOcr: true }),
+    ])
       .then(([d, p]) => {
         setStats({
           doc: d,
@@ -141,6 +166,7 @@ export default function FileStatsPage() {
       at: iso,
       note: reminderNote || null,
       done_at: reminder.done_at,
+      created_at: reminder.created_at ?? new Date().toISOString(),
     });
   }
 
@@ -311,6 +337,35 @@ export default function FileStatsPage() {
                   }
                 />
               )}
+              {(() => {
+                const durationSec = diffSeconds(
+                  (doc as any)?.spawned_time,
+                  doc?.created_at,
+                );
+                if (durationSec == null || durationSec <= 0) return null;
+                const pagesPerSec = stats.pageCount / durationSec;
+                const pagesPerSecLabel =
+                  pagesPerSec >= 1
+                    ? `${pagesPerSec.toFixed(2)} ${t.fs_pagesPerSec}`
+                    : `${(1 / pagesPerSec).toFixed(1)} ${t.fs_secPerPage}`;
+                let relHint: string | undefined;
+                if (sysIngestAvgSec && sysIngestAvgSec > 0) {
+                  const deltaPct = Math.round(
+                    ((sysIngestAvgSec - durationSec) / sysIngestAvgSec) * 100,
+                  );
+                  if (Math.abs(deltaPct) < 5) relHint = t.fs_aboutAvgSpeed;
+                  else if (deltaPct > 0)
+                    relHint = t.fs_fasterThanAvg(Math.abs(deltaPct));
+                  else relHint = t.fs_slowerThanAvg(Math.abs(deltaPct));
+                }
+                return (
+                  <KV
+                    label={t.fs_throughput}
+                    value={pagesPerSecLabel}
+                    hint={relHint}
+                  />
+                );
+              })()}
               <KV
                 label={t.fs_ocrPages}
                 value={`${stats.pagesWithOcr} / ${stats.pageCount}`}

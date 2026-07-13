@@ -1,17 +1,12 @@
 import bcrypt from "bcryptjs";
 import "dotenv/config";
-import { asc, desc, eq, sql, and, inArray } from "drizzle-orm";
+import { asc, desc, eq, sql, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import jwt from "jsonwebtoken";
 import { Pool } from "pg";
-import {
-  documentsTable,
-  pagesTable,
-  statsCountersTable,
-  usersTable,
-} from "./db/schema";
+import { documentsTable, pagesTable, usersTable } from "./db/schema";
 import {
   BucketNames,
   QueueNames,
@@ -29,6 +24,10 @@ import {
 } from "./utils/other/utils";
 import { getS3Url } from "./utils/other/s3Helpers";
 import {
+  getAuthTokenFromReq,
+  getUserIdFromAuthToken,
+  getUserIdFromReq,
+  getUsernameFromReq,
   isValidAuth,
   isValidAuthUser,
   isValidAuthWorker,
@@ -98,12 +97,22 @@ function invalidate(...keys: string[]) {
 const app = new Hono();
 
 let cachedS3Url: string | null = null;
+let cachedS3UrlAt = 0;
+const S3_URL_CACHE_TTL_MS = 60_000;
+
+function invalidateS3UrlCache() {
+  cachedS3Url = null;
+  cachedS3UrlAt = 0;
+}
+
 async function resolveS3BaseUrl(
   forceNonLocalNoChecks: boolean = false,
 ): Promise<string> {
   const originalS3: string | null = cachedS3Url;
-  if (!cachedS3Url) {
+  const isStale = Date.now() - cachedS3UrlAt > S3_URL_CACHE_TTL_MS;
+  if (!cachedS3Url || isStale) {
     cachedS3Url = await getS3Url(true, forceNonLocalNoChecks);
+    cachedS3UrlAt = Date.now();
   }
   if (originalS3 !== cachedS3Url) {
     console.log(`now using ${cachedS3Url} instead of the old ${originalS3}`);
@@ -192,15 +201,11 @@ app.use("*", async (c, next) => {
   );
   if (isPublic) return next();
 
-  let token = c.req.header("X-Auth-Token") ?? c.req.header("Authorization");
-
-  const username = c.req.header("X-Username") ?? c.req.header("username");
-
+  const token: string | null = getAuthTokenFromReq(c);
+  const username: string | null = getUsernameFromReq(c);
   if (!token) {
     return c.json({ detail: "Missing Authorization header" }, 401);
   }
-
-  token = token.replace(/^bearer\s+/i, "");
 
   try {
     const secret = process.env.CLUSTER_WORKER_SECRET ?? "";
@@ -424,69 +429,97 @@ app.post("/auth/signin", async (c) => {
 });
 
 async function computeStats() {
-  const [counters, docRes, extRes, biggestFilesRes, sparklineRes] =
-    await Promise.all([
-      getKeysFromStatsTable(db, [
-        StatsTableKeys.totalDocuments,
-        StatsTableKeys.totalPages,
-      ]),
+  const [
+    counters,
+    docRes,
+    extRes,
+    biggestFilesRes,
+    sparklineRes,
+    ingestDurationRes,
+  ] = await Promise.all([
+    getKeysFromStatsTable(db, [
+      StatsTableKeys.totalDocuments,
+      StatsTableKeys.totalPages,
+    ]),
 
-      db
-        .select({
-          lastHour:
-            sql<number>`count(*) filter (where ${documentsTable.createdAt} >= now() - interval '1 hour')`.mapWith(
-              Number,
-            ),
-          last24h:
-            sql<number>`count(*) filter (where ${documentsTable.createdAt} >= now() - interval '24 hours')`.mapWith(
-              Number,
-            ),
-          last7d:
-            sql<number>`count(*) filter (where ${documentsTable.createdAt} >= now() - interval '7 days')`.mapWith(
-              Number,
-            ),
-          last30d:
-            sql<number>`count(*) filter (where ${documentsTable.createdAt} >= now() - interval '30 days')`.mapWith(
-              Number,
-            ),
-        })
-        .from(documentsTable)
-        .where(sql`${documentsTable.createdAt} >= now() - interval '30 days'`),
+    db
+      .select({
+        lastHour:
+          sql<number>`count(*) filter (where ${documentsTable.createdAt} >= now() - interval '1 hour')`.mapWith(
+            Number,
+          ),
+        last24h:
+          sql<number>`count(*) filter (where ${documentsTable.createdAt} >= now() - interval '24 hours')`.mapWith(
+            Number,
+          ),
+        last7d:
+          sql<number>`count(*) filter (where ${documentsTable.createdAt} >= now() - interval '7 days')`.mapWith(
+            Number,
+          ),
+        last30d:
+          sql<number>`count(*) filter (where ${documentsTable.createdAt} >= now() - interval '30 days')`.mapWith(
+            Number,
+          ),
+      })
+      .from(documentsTable)
+      .where(sql`${documentsTable.createdAt} >= now() - interval '30 days'`),
 
-      db
-        .select({
-          ext: documentsTable.extension,
-          count: sql<number>`count(*)`.mapWith(Number),
-        })
-        .from(documentsTable)
-        .groupBy(documentsTable.extension),
+    db
+      .select({
+        ext: documentsTable.extension,
+        count: sql<number>`count(*)`.mapWith(Number),
+      })
+      .from(documentsTable)
+      .groupBy(documentsTable.extension),
 
-      db
-        .select({
-          filepath: documentsTable.fileS3Key,
-          page_count: documentsTable.pageCount,
-        })
-        .from(documentsTable)
-        .orderBy(sql`${documentsTable.pageCount} desc`)
-        .limit(20)
-        .then((r) =>
-          r.map((row) => ({
-            ...row,
-            size_bytes: (row.page_count ?? 0) * 100 * 1024,
-          })),
-        ),
+    db
+      .select({
+        filepath: documentsTable.fileS3Key,
+        page_count: documentsTable.pageCount,
+      })
+      .from(documentsTable)
+      .orderBy(sql`${documentsTable.pageCount} desc`)
+      .limit(20)
+      .then((r) =>
+        r.map((row) => ({
+          ...row,
+          size_bytes: (row.page_count ?? 0) * 100 * 1024,
+        })),
+      ),
 
-      db
-        .select({
-          hour: sql<string>`date_trunc('hour', ${documentsTable.createdAt})`,
-          count: sql<number>`count(*)`.mapWith(Number),
-        })
-        .from(documentsTable)
-        .where(sql`${documentsTable.createdAt} >= now() - interval '24 hours'`)
-        .groupBy(sql`date_trunc('hour', ${documentsTable.createdAt})`)
-        .orderBy(sql`date_trunc('hour', ${documentsTable.createdAt})`)
-        .then((r) => r.map((row) => row.count)),
-    ]);
+    db
+      .select({
+        hour: sql<string>`date_trunc('hour', ${documentsTable.createdAt})`,
+        count: sql<number>`count(*)`.mapWith(Number),
+      })
+      .from(documentsTable)
+      .where(sql`${documentsTable.createdAt} >= now() - interval '24 hours'`)
+      .groupBy(sql`date_trunc('hour', ${documentsTable.createdAt})`)
+      .orderBy(sql`date_trunc('hour', ${documentsTable.createdAt})`)
+      .then((r) => r.map((row) => row.count)),
+    db
+      .select({
+        avg_seconds:
+          sql<number>`avg(extract(epoch from (${documentsTable.createdAt} - ${documentsTable.spawnedInPipelineIso})))`.mapWith(
+            Number,
+          ),
+        median_seconds:
+          sql<number>`percentile_cont(0.5) within group (order by extract(epoch from (${documentsTable.createdAt} - ${documentsTable.spawnedInPipelineIso})))`.mapWith(
+            Number,
+          ),
+        min_seconds:
+          sql<number>`min(extract(epoch from (${documentsTable.createdAt} - ${documentsTable.spawnedInPipelineIso})))`.mapWith(
+            Number,
+          ),
+        max_seconds:
+          sql<number>`max(extract(epoch from (${documentsTable.createdAt} - ${documentsTable.spawnedInPipelineIso})))`.mapWith(
+            Number,
+          ),
+        sample_size: sql<number>`count(*)`.mapWith(Number),
+      })
+      .from(documentsTable)
+      .where(sql`${documentsTable.spawnedInPipelineIso} is not null`),
+  ]);
 
   const qh = await getSharedQueue();
   const local = qh.getLocalMetrics();
@@ -558,6 +591,7 @@ async function computeStats() {
     merge_workers_active:
       (queueStatsPostOcr?.busyConsumers ?? 0) > 0 ? distinctMergeHosts : 0,
     merge_workers_total: distinctMergeHosts,
+    ingest_duration: ingestDurationRes[0] ?? null,
   };
 }
 
@@ -710,12 +744,34 @@ app.get("/queue-peek", async (c) => {
   }
 });
 
+const MAIN_PAGE_SORT_COLUMNS = {
+  date_desc: () => desc(documentsTable.createdAt),
+  date_asc: () => asc(documentsTable.createdAt),
+  pages_desc: () => desc(documentsTable.pageCount),
+  pages_asc: () => asc(documentsTable.pageCount),
+  name_asc: () => asc(documentsTable.fileS3Key),
+  name_desc: () => desc(documentsTable.fileS3Key),
+} as const;
+type MainPageSortKey = keyof typeof MAIN_PAGE_SORT_COLUMNS;
+
 app.get("/main_page", async (c) => {
   const pageIdx = Number(c.req.query("pageIdx") ?? 0);
   const tagFilter = c.req.query("tag");
 
+  const authToken: string | null = getAuthTokenFromReq(c)
+
+  const userId = getUserIdFromAuthToken(authToken)
+
   const limit = Math.min(Number(c.req.query("limit") ?? 50), 500);
   const offset = pageIdx * limit;
+
+  const sortParam = (c.req.query("sort") ?? "date_desc") as string;
+  const sortKey: MainPageSortKey = (
+    Object.prototype.hasOwnProperty.call(MAIN_PAGE_SORT_COLUMNS, sortParam)
+      ? sortParam
+      : "date_desc"
+  ) as MainPageSortKey;
+  const orderByClause = MAIN_PAGE_SORT_COLUMNS[sortKey]();
 
   const whereClause = tagFilter
     ? sql`${documentsTable.assigned_tags} @> ARRAY[${tagFilter}]::text[]`
@@ -743,14 +799,21 @@ app.get("/main_page", async (c) => {
       })
       .from(documentsTable)
       .innerJoin(pagesTable, eq(documentsTable.file_id, pagesTable.file_id))
-      .where(and(eq(pagesTable.page_idx, 0), whereClause))
-      .orderBy(desc(documentsTable.createdAt))
+      .where(
+        and(
+          eq(pagesTable.page_idx, 0),
+          whereClause,
+          eq(documentsTable.user_id, userId),
+        ),
+      )
+      .orderBy(orderByClause)
       .limit(limit)
       .offset(offset),
   ]);
 
   c.header("X-Total-Count", String(countRes[0].count));
   c.header("X-Page-Count", String(pageCountRes[0].count));
+  c.header("X-Sort-Applied", sortKey);
 
   const resModed = res.map((file) => ({
     ...file,
@@ -759,11 +822,13 @@ app.get("/main_page", async (c) => {
   return c.json(resModed);
 });
 
+
 app.get("/search", async (c) => {
   const rawQuery = c.req.query("query") || "";
-  const limit = Math.min(parseInt(c.req.query("limit") ?? "200"), 500);
+  const limit = parseInt(c.req.query("limit") ?? "500");
   const createdAfter = c.req.query("created_after");
   const createdBefore = c.req.query("created_before");
+  const userId: number = getUserIdFromReq(c)
 
   const includeTagsParam = c.req.query("tags");
   const includeTags = includeTagsParam
@@ -814,11 +879,13 @@ app.get("/search", async (c) => {
     .replace(excludeRegex, "")
     .trim();
 
-  let finalFilter: (string | string[])[] = [...tags];
+  // user_id scope is always present and always AND'd with everything else,
+  // so no other filter branch below can accidentally widen results across users
+  let finalFilter: (string | string[])[] = [
+    `user_id = ${userId}`,
+    ...tags,
+  ];
   if (includeTags.length > 0) {
-    // A nested array is an OR group in Meilisearch's filter syntax, so this
-    // reads as "assigned_tags is ANY of the selected tags" while still
-    // being AND'd against everything else in finalFilter.
     finalFilter.push(
       includeTags.map((tg) => `assigned_tags = '${escapeForFilter(tg)}'`),
     );
@@ -852,8 +919,6 @@ app.get("/search", async (c) => {
     cropLength: 40,
   };
 
-  // Facet counts run concurrently with the main search — it doesn't depend
-  // on sort, so no need to serialize it behind the fallback logic below.
   const facetPromise = index
     .search("", {
       limit: 0,
@@ -872,7 +937,6 @@ app.get("/search", async (c) => {
       });
       sortApplied = true;
     } catch (sortErr: any) {
-
       console.warn(
         `[search] sort="${sortParam}" unavailable, falling back to relevance:`,
         sortErr?.message,
@@ -964,6 +1028,7 @@ app.get("/document", async (c) => {
       created_at: documentsTable.createdAt,
       assigned_tags: documentsTable.assigned_tags,
       file_id: documentsTable.file_id,
+      spawned_time: documentsTable.spawnedInPipelineIso,
       page_count:
         sql<number>`(select count(*) from ${pagesTable} p where p.file_id = ${documentsTable.file_id})`.mapWith(
           Number,
@@ -1010,7 +1075,7 @@ app.post("/internal/get_file_enc_key", async (c) => {
 
 app.post("/check/user_exists", async (c) => {
   const body = await c.req.json();
-  const username = body.username;
+  const username = body.username.trim().toLowerCase();
   if (typeof username !== "string" || !username.trim())
     return c.json({ exists: false });
   const exists = await usernameExistsServer(db, username);
@@ -1078,14 +1143,14 @@ async function handleDeleteDocument(c: Context) {
       const pagesDeleted = deletedPages.rows.length;
 
       await tx.execute(sql`
-        UPDATE stats_counters
-        SET value = stats_counters.value + d.delta
-        FROM (VALUES
-          (${StatsTableKeys.totalPages}, ${-pagesDeleted}),
-          (${StatsTableKeys.totalDocuments}, ${-1})
-        ) AS d(key, delta)
-        WHERE stats_counters.key = d.key
-      `);
+  UPDATE stats_counters AS s
+  SET value = s.value + d.delta::integer
+  FROM (VALUES
+    (${StatsTableKeys.totalPages}, ${-pagesDeleted}),
+    (${StatsTableKeys.totalDocuments}, ${-1})
+  ) AS d(key, delta)
+  WHERE s.key = d.key
+`);
 
       return { fileId, pagesDeleted };
     });
@@ -1126,6 +1191,9 @@ app.get("/download", async (c) => {
   try {
     res = await fetch(s3Url);
   } catch (e: any) {
+    
+    console.error(`[DOWNLOAD] fetch failed for ${s3Url}:`, e?.message);
+    invalidateS3UrlCache();
     return c.json({ error: `S3 fetch failed: ${e.message}` }, 502);
   }
 

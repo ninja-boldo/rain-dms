@@ -8,6 +8,7 @@ import DocumentPage from "./pages/DocumentPage";
 import StatsPage from "./pages/StatsPage";
 import SettingsPage from "./pages/SettingsPage";
 import FileStatsPage from "./pages/FileStatsPage";
+import RemindersMarkersPage from "./pages/RemindersMarkersPage";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token);
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="search" element={<SearchPage />} />
           <Route path="document" element={<DocumentPage />} />
           <Route path="file-stats" element={<FileStatsPage />} />
+          <Route path="markers" element={<RemindersMarkersPage />} />
           <Route path="stats" element={<StatsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
